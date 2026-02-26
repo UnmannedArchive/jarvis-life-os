@@ -5,20 +5,10 @@ import { useStore } from '@/stores/useStore';
 import { prioritizeQuests } from '@/lib/priority';
 import { PILLAR_CONFIG, DIFFICULTY_CONFIG, Pillar, Difficulty, Quest } from '@/lib/types';
 import HUDPanel from '@/components/hud/HUDPanel';
-import HUDLabel from '@/components/hud/HUDLabel';
 import HUDButton from '@/components/hud/HUDButton';
 import DifficultyBadge from '@/components/hud/DifficultyBadge';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Plus, X, Brain, Dumbbell, Briefcase, TrendingUp, Sparkles, Users } from 'lucide-react';
-
-const PILLAR_ICONS: Record<Pillar, React.ReactNode> = {
-  mind: <Brain size={14} />,
-  body: <Dumbbell size={14} />,
-  work: <Briefcase size={14} />,
-  wealth: <TrendingUp size={14} />,
-  spirit: <Sparkles size={14} />,
-  social: <Users size={14} />,
-};
+import { Check, Plus, X } from 'lucide-react';
 
 function QuestCard({ quest }: { quest: Quest }) {
   const completeQuest = useStore((s) => s.completeQuest);
@@ -26,67 +16,61 @@ function QuestCard({ quest }: { quest: Quest }) {
   const pillarConfig = PILLAR_CONFIG[quest.pillar];
 
   const handleComplete = useCallback(() => {
+    if (quest.completed) return;
     completeQuest(quest.id);
     setXpPopup(true);
     setTimeout(() => setXpPopup(false), 1500);
-  }, [quest.id, completeQuest]);
+  }, [quest.id, quest.completed, completeQuest]);
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 10, height: 0 }}
-      className={`
-        flex items-center gap-3 p-3 border transition-all relative group
-        ${quest.completed
-          ? 'border-white/5 bg-white/2 opacity-50'
-          : 'border-hud-border bg-hud-panel hover:border-hud-border-bright'}
-      `}
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: 20, height: 0 }}
+      className={`flex items-center gap-3 p-3 rounded-lg border transition-all relative group ${
+        quest.completed
+          ? 'bg-bg-secondary border-border opacity-60'
+          : 'bg-white border-border hover:border-border-hover hover:shadow-sm'
+      }`}
     >
       <button
         onClick={handleComplete}
         disabled={quest.completed}
-        className={`
-          w-6 h-6 flex-shrink-0 border-2 flex items-center justify-center transition-all cursor-pointer
-          ${quest.completed
-            ? 'border-hud-green bg-hud-green/20'
-            : 'border-hud-green/30 hover:border-hud-green hover:bg-hud-green/10'}
-        `}
+        className={`w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-all cursor-pointer ${
+          quest.completed
+            ? 'border-success bg-success'
+            : 'border-border-hover hover:border-accent'
+        }`}
       >
-        {quest.completed && <Check size={12} className="text-hud-green" />}
+        {quest.completed && <Check size={10} className="text-white" strokeWidth={3} />}
       </button>
 
       <div
-        className="w-6 h-6 flex-shrink-0 flex items-center justify-center"
-        style={{ color: pillarConfig.color }}
-      >
-        {PILLAR_ICONS[quest.pillar]}
-      </div>
+        className="w-2 h-2 rounded-full flex-shrink-0"
+        style={{ backgroundColor: pillarConfig.color }}
+      />
 
       <div className="flex-1 min-w-0">
-        <div className={`text-sm font-medium truncate ${quest.completed ? 'line-through' : ''}`}>
+        <div className={`text-sm ${quest.completed ? 'line-through text-text-tertiary' : 'text-text-primary'}`}>
           {quest.title}
-        </div>
-        <div className="text-[10px] text-hud-text-dim uppercase tracking-[1px]">
-          {pillarConfig.label}
         </div>
       </div>
 
       <DifficultyBadge difficulty={quest.difficulty} />
 
-      <div className="text-[11px] font-[family-name:var(--font-orbitron)] text-hud-green glow-text whitespace-nowrap">
+      <span className="text-xs font-medium text-text-tertiary whitespace-nowrap">
         +{quest.xp_reward} XP
-      </div>
+      </span>
 
       <AnimatePresence>
         {xpPopup && (
           <motion.div
             initial={{ opacity: 1, y: 0 }}
-            animate={{ opacity: 0, y: -30 }}
+            animate={{ opacity: 0, y: -24 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 1.2 }}
-            className="absolute right-4 -top-2 text-hud-green font-[family-name:var(--font-orbitron)] text-sm glow-text pointer-events-none"
+            transition={{ duration: 1 }}
+            className="absolute right-4 -top-2 text-accent font-semibold text-sm pointer-events-none"
           >
             +{quest.xp_reward} XP
           </motion.div>
@@ -101,19 +85,19 @@ export default function PriorityQueue() {
   const pillars = useStore((s) => s.pillars);
   const todayCheckin = useStore((s) => s.todayCheckin);
   const addQuest = useStore((s) => s.addQuest);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newPillar, setNewPillar] = useState<Pillar>('work');
   const [newDifficulty, setNewDifficulty] = useState<Difficulty>('MED');
+  const [newType, setNewType] = useState<'daily' | 'side'>('daily');
 
   const todayQuests = useMemo(() => {
-    const incomplete = quests.filter((q) => !q.completed && (q.quest_type === 'daily' || q.quest_type === 'side'));
-    const completed = quests.filter((q) => q.completed);
-    const prioritized = prioritizeQuests(incomplete, pillars, todayCheckin);
-    return [...prioritized, ...completed];
+    const active = quests.filter((q) => !q.completed && (q.quest_type === 'daily' || q.quest_type === 'side'));
+    const done = quests.filter((q) => q.completed);
+    return [...prioritizeQuests(active, pillars, todayCheckin), ...done];
   }, [quests, pillars, todayCheckin]);
 
-  const handleAddQuest = () => {
+  const handleAdd = () => {
     if (!newTitle.trim()) return;
     addQuest({
       title: newTitle.trim(),
@@ -121,49 +105,55 @@ export default function PriorityQueue() {
       pillar: newPillar,
       difficulty: newDifficulty,
       xp_reward: DIFFICULTY_CONFIG[newDifficulty].xp,
-      quest_type: 'side',
-      is_recurring: false,
-      recurrence_rule: null,
+      quest_type: newType,
+      is_recurring: newType === 'daily',
+      recurrence_rule: newType === 'daily' ? 'daily' : null,
       due_date: null,
     });
     setNewTitle('');
-    setShowAddForm(false);
+    setShowAdd(false);
   };
 
   return (
-    <HUDPanel delay={2}>
-      <div className="flex items-center justify-between mb-1">
-        <HUDLabel text="Priority Queue" />
-        <HUDButton
-          size="sm"
-          onClick={() => setShowAddForm(!showAddForm)}
-        >
-          {showAddForm ? <X size={12} /> : <><Plus size={12} /> Add Quest</>}
+    <HUDPanel delay={1}>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base font-semibold text-text-primary">Today&apos;s Tasks</h2>
+        <HUDButton size="sm" variant="secondary" onClick={() => setShowAdd(!showAdd)}>
+          {showAdd ? <X size={14} /> : <><Plus size={14} /> Add Task</>}
         </HUDButton>
       </div>
 
       <AnimatePresence>
-        {showAddForm && (
+        {showAdd && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="mb-3 border border-hud-border p-3 bg-hud-panel"
+            className="mb-4 rounded-lg border border-border p-4 bg-bg-secondary"
           >
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               <input
                 type="text"
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="Quest title..."
-                className="w-full bg-white/5 border border-hud-border px-3 py-2 text-sm text-hud-text placeholder:text-hud-text-dim focus:outline-none focus:border-hud-green/40"
-                onKeyDown={(e) => e.key === 'Enter' && handleAddQuest()}
+                placeholder="What do you need to do?"
+                className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-placeholder"
+                onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+                autoFocus
               />
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap items-center">
+                <select
+                  value={newType}
+                  onChange={(e) => setNewType(e.target.value as 'daily' | 'side')}
+                  className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-sm text-text-secondary"
+                >
+                  <option value="daily">Daily (recurring)</option>
+                  <option value="side">One-time</option>
+                </select>
                 <select
                   value={newPillar}
                   onChange={(e) => setNewPillar(e.target.value as Pillar)}
-                  className="bg-white/5 border border-hud-border px-2 py-1 text-xs text-hud-text focus:outline-none focus:border-hud-green/40"
+                  className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-sm text-text-secondary"
                 >
                   {Object.entries(PILLAR_CONFIG).map(([key, val]) => (
                     <option key={key} value={key}>{val.label}</option>
@@ -172,30 +162,30 @@ export default function PriorityQueue() {
                 <select
                   value={newDifficulty}
                   onChange={(e) => setNewDifficulty(e.target.value as Difficulty)}
-                  className="bg-white/5 border border-hud-border px-2 py-1 text-xs text-hud-text focus:outline-none focus:border-hud-green/40"
+                  className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-sm text-text-secondary"
                 >
                   {Object.entries(DIFFICULTY_CONFIG).map(([key, val]) => (
-                    <option key={key} value={key}>{val.label} (+{val.xp} XP)</option>
+                    <option key={key} value={key}>{val.label} · {val.xp} XP</option>
                   ))}
                 </select>
-                <HUDButton size="sm" onClick={handleAddQuest}>
-                  Create
-                </HUDButton>
+                <HUDButton size="sm" onClick={handleAdd}>Create</HUDButton>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1.5">
         <AnimatePresence mode="popLayout">
           {todayQuests.map((quest) => (
             <QuestCard key={quest.id} quest={quest} />
           ))}
         </AnimatePresence>
         {todayQuests.length === 0 && (
-          <div className="text-center py-8 text-hud-text-dim text-sm">
-            No quests loaded. Add one to begin your mission.
+          <div className="text-center py-12">
+            <div className="text-4xl mb-3">📋</div>
+            <p className="text-text-tertiary text-sm">No tasks yet.</p>
+            <p className="text-text-placeholder text-xs mt-1">Click &quot;Add Task&quot; to create your first one.</p>
           </div>
         )}
       </div>

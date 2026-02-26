@@ -12,45 +12,25 @@ interface StatCardProps {
   delay?: number;
 }
 
-export default function StatCard({
-  icon,
-  label,
-  value,
-  sublabel,
-  color = '#00ff88',
-  delay = 0,
-}: StatCardProps) {
+export default function StatCard({ icon, label, value, sublabel, color = '#228be6', delay = 0 }: StatCardProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: delay * 0.05 }}
-      className="hud-panel hud-panel-inner p-3 flex items-center gap-3 min-w-0"
+      transition={{ duration: 0.25, delay: delay * 0.04 }}
+      className="bg-white rounded-xl border border-border p-4 shadow-sm"
     >
-      <div
-        className="flex-shrink-0 w-8 h-8 flex items-center justify-center border"
-        style={{
-          borderColor: `${color}33`,
-          backgroundColor: `${color}11`,
-          color,
-        }}
-      >
-        {icon}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[9px] font-[family-name:var(--font-orbitron)] tracking-[2px] uppercase text-hud-text-muted truncate">
-          {label}
-        </div>
+      <div className="flex items-center gap-2 mb-2">
         <div
-          className="text-lg font-[family-name:var(--font-orbitron)] leading-tight"
-          style={{ color, textShadow: `0 0 8px ${color}66` }}
+          className="w-8 h-8 rounded-lg flex items-center justify-center"
+          style={{ backgroundColor: `${color}15`, color }}
         >
-          {value}
+          {icon}
         </div>
-        {sublabel && (
-          <div className="text-[10px] text-hud-text-dim truncate">{sublabel}</div>
-        )}
       </div>
+      <div className="text-2xl font-bold text-text-primary">{value}</div>
+      <div className="text-xs text-text-tertiary mt-0.5">{label}</div>
+      {sublabel && <div className="text-[11px] text-text-placeholder mt-0.5">{sublabel}</div>}
     </motion.div>
   );
 }

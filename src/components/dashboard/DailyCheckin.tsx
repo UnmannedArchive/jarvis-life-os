@@ -5,33 +5,30 @@ import { useStore } from '@/stores/useStore';
 import HUDButton from '@/components/hud/HUDButton';
 import { motion } from 'framer-motion';
 
-const EMOJIS = ['😴', '😐', '🙂', '😊', '🔥'];
+const LEVELS = [
+  { value: 1, emoji: '😴', label: 'Low' },
+  { value: 2, emoji: '😐', label: 'Below avg' },
+  { value: 3, emoji: '🙂', label: 'Okay' },
+  { value: 4, emoji: '😊', label: 'Good' },
+  { value: 5, emoji: '🔥', label: 'Great' },
+];
 
-interface SliderProps {
-  label: string;
-  value: number;
-  onChange: (val: number) => void;
-}
-
-function MetricSlider({ label, value, onChange }: SliderProps) {
+function MetricSlider({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   return (
-    <div className="flex-1 min-w-0">
-      <div className="text-[10px] font-[family-name:var(--font-orbitron)] tracking-[2px] uppercase text-hud-text-muted mb-2">
-        {label}
-      </div>
-      <div className="flex items-center gap-1">
-        {[1, 2, 3, 4, 5].map((val) => (
+    <div className="flex-1">
+      <div className="text-xs font-medium text-text-secondary mb-2">{label}</div>
+      <div className="flex gap-1">
+        {LEVELS.map((l) => (
           <button
-            key={val}
-            onClick={() => onChange(val)}
-            className={`
-              flex-1 py-1.5 text-center text-sm border transition-all cursor-pointer
-              ${value === val
-                ? 'border-hud-green/50 bg-hud-green/15 text-hud-green'
-                : 'border-white/5 bg-white/3 text-hud-text-dim hover:border-hud-green/20 hover:bg-hud-green/5'}
-            `}
+            key={l.value}
+            onClick={() => onChange(l.value)}
+            className={`flex-1 py-2 rounded-lg text-center text-base transition-all cursor-pointer border ${
+              value === l.value
+                ? 'border-accent bg-accent-light'
+                : 'border-border bg-white hover:border-border-hover'
+            }`}
           >
-            {EMOJIS[val - 1]}
+            {l.emoji}
           </button>
         ))}
       </div>
@@ -49,21 +46,15 @@ export default function DailyCheckin() {
     <motion.div
       initial={{ opacity: 0, height: 0 }}
       animate={{ opacity: 1, height: 'auto' }}
-      className="border border-hud-cyan/20 bg-hud-cyan/5 p-3 mt-2"
+      className="bg-accent-light/50 border border-accent/20 rounded-lg p-4"
     >
-      <div className="text-[10px] font-[family-name:var(--font-orbitron)] tracking-[2px] uppercase text-hud-cyan mb-3 glow-text-cyan">
-        ◆ Daily Pulse Check-In
-      </div>
-      <div className="flex flex-col sm:flex-row gap-4 mb-3">
+      <div className="text-sm font-semibold text-accent mb-3">Daily Check-In</div>
+      <div className="flex flex-col sm:flex-row gap-4 mb-4">
         <MetricSlider label="Sleep Quality" value={sleep} onChange={setSleep} />
         <MetricSlider label="Energy Level" value={energy} onChange={setEnergy} />
         <MetricSlider label="Mood" value={mood} onChange={setMood} />
       </div>
-      <HUDButton
-        variant="secondary"
-        size="sm"
-        onClick={() => submitCheckin(sleep, energy, mood)}
-      >
+      <HUDButton size="sm" onClick={() => submitCheckin(sleep, energy, mood)}>
         Submit Check-In
       </HUDButton>
     </motion.div>

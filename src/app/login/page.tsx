@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Hexagon } from 'lucide-react';
 import HUDButton from '@/components/hud/HUDButton';
-import { motion } from 'framer-motion';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,72 +15,38 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // Demo mode: just redirect
-    setTimeout(() => {
-      router.push('/');
-    }, 800);
+    setTimeout(() => router.push('/'), 600);
   };
 
   return (
-    <div className="min-h-screen hud-bg-gradient flex items-center justify-center p-4">
-      <div className="hud-grid-overlay" />
-      <div className="hud-scanlines" />
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="hud-panel hud-panel-inner p-8 w-full max-w-sm relative z-10"
-      >
+    <div className="min-h-screen bg-bg-secondary flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-lg border border-border p-8 w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <Hexagon size={40} className="text-hud-green mb-3" style={{ filter: 'drop-shadow(0 0 10px rgba(0,255,136,0.5))' }} />
-          <h1 className="font-[family-name:var(--font-orbitron)] text-xl tracking-[4px] text-hud-green glow-text">
-            JARVIS
-          </h1>
-          <p className="text-[10px] font-[family-name:var(--font-orbitron)] tracking-[3px] text-hud-text-muted mt-1">
-            LIFE OS // AUTHENTICATION
-          </p>
+          <div className="w-12 h-12 rounded-xl bg-accent flex items-center justify-center mb-3">
+            <Hexagon size={22} className="text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-text-primary">Welcome back</h1>
+          <p className="text-sm text-text-tertiary mt-1">Sign in to Life OS</p>
         </div>
-
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="text-[10px] font-[family-name:var(--font-orbitron)] tracking-[2px] uppercase text-hud-text-muted block mb-1">
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="operator@jarvis.os"
-              className="w-full bg-white/5 border border-hud-border px-3 py-2.5 text-sm text-hud-text placeholder:text-hud-text-dim focus:outline-none focus:border-hud-green/40"
-            />
+            <label className="text-xs font-medium text-text-secondary block mb-1.5">Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com"
+              className="w-full border border-border rounded-lg px-3 py-2.5 text-sm placeholder:text-text-placeholder" />
           </div>
           <div>
-            <label className="text-[10px] font-[family-name:var(--font-orbitron)] tracking-[2px] uppercase text-hud-text-muted block mb-1">
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full bg-white/5 border border-hud-border px-3 py-2.5 text-sm text-hud-text placeholder:text-hud-text-dim focus:outline-none focus:border-hud-green/40"
-            />
+            <label className="text-xs font-medium text-text-secondary block mb-1.5">Password</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
+              className="w-full border border-border rounded-lg px-3 py-2.5 text-sm placeholder:text-text-placeholder" />
           </div>
           <HUDButton type="submit" disabled={loading} className="w-full">
-            {loading ? 'AUTHENTICATING...' : 'INITIALIZE SESSION'}
+            {loading ? 'Signing in...' : 'Sign In'}
           </HUDButton>
         </form>
-
         <div className="mt-6 text-center">
-          <Link
-            href="/signup"
-            className="text-[11px] font-[family-name:var(--font-orbitron)] tracking-[2px] text-hud-cyan hover:text-hud-cyan/80 transition-colors"
-          >
-            CREATE NEW OPERATOR PROFILE →
-          </Link>
+          <Link href="/signup" className="text-sm text-accent hover:underline">Create an account</Link>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

@@ -14,8 +14,8 @@ interface ProgressRingProps {
 export default function ProgressRing({
   percentage,
   size = 80,
-  strokeWidth = 3,
-  color = '#00ff88',
+  strokeWidth = 4,
+  color = '#228be6',
   label,
   value,
 }: ProgressRingProps) {
@@ -24,50 +24,27 @@ export default function ProgressRing({
   const offset = circumference - (percentage / 100) * circumference;
 
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className="flex flex-col items-center gap-1.5">
       <div className="relative" style={{ width: size, height: size }}>
         <svg width={size} height={size} className="-rotate-90">
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            fill="none"
-            stroke="rgba(255,255,255,0.05)"
-            strokeWidth={strokeWidth}
-          />
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#f1f3f5" strokeWidth={strokeWidth} />
           <motion.circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            fill="none"
-            stroke={color}
-            strokeWidth={strokeWidth}
+            cx={size / 2} cy={size / 2} r={radius} fill="none"
+            stroke={color} strokeWidth={strokeWidth}
             strokeDasharray={circumference}
             initial={{ strokeDashoffset: circumference }}
             animate={{ strokeDashoffset: offset }}
-            transition={{ duration: 1.2, ease: 'easeOut' }}
-            strokeLinecap="butt"
-            style={{
-              filter: `drop-shadow(0 0 6px ${color}66)`,
-            }}
+            transition={{ duration: 1, ease: 'easeOut' }}
+            strokeLinecap="round"
           />
         </svg>
         {value && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <span
-              className="font-[family-name:var(--font-orbitron)] text-sm"
-              style={{ color, textShadow: `0 0 8px ${color}66` }}
-            >
-              {value}
-            </span>
+            <span className="text-sm font-semibold text-text-primary">{value}</span>
           </div>
         )}
       </div>
-      {label && (
-        <span className="text-[9px] font-[family-name:var(--font-orbitron)] tracking-[2px] uppercase text-hud-text-muted">
-          {label}
-        </span>
-      )}
+      {label && <span className="text-[11px] text-text-tertiary font-medium">{label}</span>}
     </div>
   );
 }

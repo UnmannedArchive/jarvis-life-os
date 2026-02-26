@@ -1,28 +1,22 @@
 'use client';
 
-import { Difficulty, DIFFICULTY_CONFIG } from '@/lib/types';
+import { Difficulty } from '@/lib/types';
 
-interface DifficultyBadgeProps {
-  difficulty: Difficulty;
-  size?: 'sm' | 'md';
-}
+const CONFIG: Record<Difficulty, { label: string; bg: string; text: string }> = {
+  EASY: { label: 'Easy', bg: '#ebfbee', text: '#2b8a3e' },
+  MED: { label: 'Medium', bg: '#e7f5ff', text: '#1864ab' },
+  HARD: { label: 'Hard', bg: '#fff9db', text: '#e67700' },
+  LEGENDARY: { label: 'Legendary', bg: '#fff5f5', text: '#c92a2a' },
+};
 
-export default function DifficultyBadge({ difficulty, size = 'sm' }: DifficultyBadgeProps) {
-  const config = DIFFICULTY_CONFIG[difficulty];
-  const textSize = size === 'sm' ? 'text-[9px]' : 'text-[10px]';
-  const padding = size === 'sm' ? 'px-1.5 py-0.5' : 'px-2 py-1';
-
+export default function DifficultyBadge({ difficulty }: { difficulty: Difficulty; size?: 'sm' | 'md' }) {
+  const c = CONFIG[difficulty];
   return (
     <span
-      className={`${textSize} ${padding} font-[family-name:var(--font-orbitron)] tracking-[2px] uppercase border`}
-      style={{
-        color: config.color,
-        borderColor: `${config.color}44`,
-        backgroundColor: `${config.color}11`,
-        textShadow: `0 0 8px ${config.color}44`,
-      }}
+      className="text-[11px] font-medium px-2 py-0.5 rounded-full"
+      style={{ backgroundColor: c.bg, color: c.text }}
     >
-      {config.label}
+      {c.label}
     </span>
   );
 }
