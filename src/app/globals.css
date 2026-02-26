@@ -1,0 +1,259 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-hud-bg: #0a0e14;
+  --color-hud-panel: rgba(0, 255, 136, 0.03);
+  --color-hud-border: rgba(0, 255, 136, 0.15);
+  --color-hud-border-bright: rgba(0, 255, 136, 0.4);
+  --color-hud-green: #00ff88;
+  --color-hud-cyan: #00e5ff;
+  --color-hud-amber: #ffd740;
+  --color-hud-danger: #ff6e40;
+  --color-hud-text: #e0fff0;
+  --color-hud-text-muted: #7fba9a;
+  --color-hud-text-dim: rgba(127, 186, 154, 0.6);
+  --font-orbitron: "Orbitron", monospace;
+  --font-rajdhani: "Rajdhani", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 255, 136, 0.2) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 4px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 136, 0.2);
+  border-radius: 2px;
+}
+
+body {
+  background: var(--color-hud-bg);
+  color: var(--color-hud-text);
+  font-family: var(--font-rajdhani);
+  overflow-x: hidden;
+}
+
+/* Grid overlay */
+.hud-grid-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(0, 255, 136, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 136, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Scanline effect */
+.hud-scanlines {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 255, 136, 0.008) 2px,
+    rgba(0, 255, 136, 0.008) 4px
+  );
+  animation: scanline-scroll 8s linear infinite;
+}
+
+@keyframes scanline-scroll {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(40px); }
+}
+
+/* Glow text */
+.glow-text {
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5), 0 0 20px rgba(0, 255, 136, 0.2);
+}
+
+.glow-text-cyan {
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.5), 0 0 20px rgba(0, 229, 255, 0.2);
+}
+
+.glow-text-amber {
+  text-shadow: 0 0 10px rgba(255, 215, 64, 0.5), 0 0 20px rgba(255, 215, 64, 0.2);
+}
+
+/* Panel corner accents */
+.hud-panel {
+  position: relative;
+  background: var(--color-hud-panel);
+  border: 1px solid var(--color-hud-border);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hud-panel::before,
+.hud-panel::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--color-hud-green);
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.hud-panel::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid;
+  border-left: 2px solid;
+}
+
+.hud-panel::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2px solid;
+  border-right: 2px solid;
+}
+
+.hud-panel-inner::before,
+.hud-panel-inner::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--color-hud-green);
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.hud-panel-inner::before {
+  top: -1px;
+  right: -1px;
+  border-top: 2px solid;
+  border-right: 2px solid;
+}
+
+.hud-panel-inner::after {
+  bottom: -1px;
+  left: -1px;
+  border-bottom: 2px solid;
+  border-left: 2px solid;
+}
+
+.hud-panel:hover {
+  border-color: var(--color-hud-border-bright);
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.05), inset 0 0 20px rgba(0, 255, 136, 0.02);
+}
+
+/* Pulse animation */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* XP float animation */
+@keyframes xp-float {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-40px); }
+}
+
+.xp-float {
+  animation: xp-float 1.5s ease-out forwards;
+}
+
+/* Level up flash */
+@keyframes level-up-flash {
+  0% { opacity: 0; }
+  20% { opacity: 0.4; }
+  100% { opacity: 0; }
+}
+
+.level-up-flash {
+  animation: level-up-flash 1.5s ease-out forwards;
+}
+
+/* Fade in stagger */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in-up {
+  animation: fade-in-up 0.5s ease-out forwards;
+}
+
+/* Line decorator */
+.line-decorator {
+  position: relative;
+}
+
+.line-decorator::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--color-hud-green), transparent);
+  opacity: 0.3;
+}
+
+/* HUD label style */
+.hud-label {
+  font-family: var(--font-orbitron);
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--color-hud-green);
+}
+
+/* Terminal log scrolling */
+@keyframes terminal-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Clock pulse */
+@keyframes clock-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.clock-separator {
+  animation: clock-pulse 1s step-end infinite;
+}
+
+/* Number glow */
+.number-glow {
+  font-family: var(--font-orbitron);
+  color: var(--color-hud-green);
+  text-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
+}
+
+/* Status dot */
+@keyframes status-pulse {
+  0%, 100% { box-shadow: 0 0 4px currentColor; }
+  50% { box-shadow: 0 0 12px currentColor; }
+}
+
+.status-dot {
+  animation: status-pulse 2s ease-in-out infinite;
+}
+
+/* Background gradient */
+.hud-bg-gradient {
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(0, 255, 136, 0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(0, 229, 255, 0.02) 0%, transparent 50%),
+    #0a0e14;
+}
