@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react';
 import { useStore } from '@/stores/useStore';
-import type { XPHistoryEntry } from '@/stores/useStore';
 import { PILLAR_CONFIG, Pillar } from '@/lib/types';
 import HUDPanel from '@/components/hud/HUDPanel';
 import ProgressRing from '@/components/hud/ProgressRing';
@@ -20,7 +19,7 @@ type TimeRange = '7d' | '14d' | '30d';
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white rounded-lg border border-border shadow-lg p-2.5 text-xs">
+    <div className="bg-[rgba(255,255,255,0.03)] rounded-xl border border-border shadow-lg p-2.5 text-xs">
       <div className="font-medium text-text-primary mb-1">{label}</div>
       {payload.map((e: any) => (
         <div key={e.name} className="flex items-center gap-1.5 text-text-secondary">
@@ -70,17 +69,17 @@ export default function AnalyticsPage() {
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <StatCard icon={<Target size={14} />} label="Tasks Completed" value={totalCompleted} color="#228be6" delay={0} />
-        <StatCard icon={<Flame size={14} />} label="Current Streak" value={`${user?.current_streak || 0}d`} sublabel={`Best: ${user?.longest_streak || 0}d`} color="#fab005" delay={1} />
-        <StatCard icon={<TrendingUp size={14} />} label="Total XP" value={user?.total_xp?.toLocaleString() || '0'} color="#7950f2" delay={2} />
-        <StatCard icon={<Zap size={14} />} label="Completion Rate" value={`${completionRate}%`} sublabel="of daily tasks" color="#40c057" delay={3} />
+        <StatCard icon={<Target size={14} />} label="Tasks Completed" value={totalCompleted} color="#c0c0c0" delay={0} />
+        <StatCard icon={<Flame size={14} />} label="Current Streak" value={`${user?.current_streak || 0}d`} sublabel={`Best: ${user?.longest_streak || 0}d`} color="#fbbf24" delay={1} />
+        <StatCard icon={<TrendingUp size={14} />} label="Total XP" value={user?.total_xp?.toLocaleString() || '0'} color="#888888" delay={2} />
+        <StatCard icon={<Zap size={14} />} label="Completion Rate" value={`${completionRate}%`} sublabel="of daily tasks" color="#34d399" delay={3} />
       </div>
 
       <div className="flex gap-1 mb-4">
         {ranges.map((r) => (
           <button key={r.key} onClick={() => setRange(r.key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-              range === r.key ? 'bg-accent-light text-accent' : 'text-text-tertiary hover:bg-bg-secondary'
+            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+              range === r.key ? 'bg-accent-dim text-accent' : 'text-text-tertiary hover:bg-[rgba(255,255,255,0.04)]'
             }`}>
             {r.label}
           </button>
@@ -97,16 +96,16 @@ export default function AnalyticsPage() {
               <AreaChart data={xpChartData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
                 <defs>
                   <linearGradient id="xpG" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#228be6" stopOpacity={0.2} />
-                    <stop offset="100%" stopColor="#228be6" stopOpacity={0} />
+                    <stop offset="0%" stopColor="#c0c0c0" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="#c0c0c0" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f3f5" />
-                <XAxis dataKey="date" tick={{ fill: '#868e96', fontSize: 10 }} axisLine={{ stroke: '#e9ecef' }} tickLine={false} interval="preserveStartEnd" />
-                <YAxis tick={{ fill: '#868e96', fontSize: 10 }} axisLine={{ stroke: '#e9ecef' }} tickLine={false} width={30} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                <XAxis dataKey="date" tick={{ fill: '#555555', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.06)' }} tickLine={false} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: '#555555', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.06)' }} tickLine={false} width={30} />
                 <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="xp" name="XP" stroke="#228be6" fill="url(#xpG)" strokeWidth={2} dot={false}
-                  activeDot={{ r: 4, fill: '#228be6', stroke: 'white', strokeWidth: 2 }} />
+                <Area type="monotone" dataKey="xp" name="XP" stroke="#c0c0c0" fill="url(#xpG)" strokeWidth={2} dot={false}
+                  activeDot={{ r: 4, fill: '#c0c0c0', stroke: '#000000', strokeWidth: 2 }} />
               </AreaChart>
             </ResponsiveContainer>
           )}
@@ -119,9 +118,9 @@ export default function AnalyticsPage() {
           ) : (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={pillarChartData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f3f5" />
-                <XAxis dataKey="date" tick={{ fill: '#868e96', fontSize: 10 }} axisLine={{ stroke: '#e9ecef' }} tickLine={false} interval="preserveStartEnd" />
-                <YAxis tick={{ fill: '#868e96', fontSize: 10 }} axisLine={{ stroke: '#e9ecef' }} tickLine={false} width={30} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                <XAxis dataKey="date" tick={{ fill: '#555555', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.06)' }} tickLine={false} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: '#555555', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.06)' }} tickLine={false} width={30} />
                 <Tooltip content={<CustomTooltip />} />
                 {PILLAR_ORDER.map((p) => (
                   <Bar key={p} dataKey={p} name={PILLAR_CONFIG[p].label} stackId="a" fill={PILLAR_CONFIG[p].color} radius={[2, 2, 0, 0]} />
@@ -148,7 +147,7 @@ export default function AnalyticsPage() {
                     </div>
                     <span className="text-xs text-text-tertiary">{xp} XP · {Math.round(pct)}%</span>
                   </div>
-                  <div className="w-full h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
+                  <div className="w-full h-1.5 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
                     <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: config.color }} />
                   </div>
                 </div>

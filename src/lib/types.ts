@@ -91,17 +91,17 @@ export interface Goal {
 }
 
 export const PILLAR_CONFIG: Record<Pillar, { label: string; icon: string; color: string }> = {
-  mind: { label: 'Mind', icon: 'Brain', color: '#00e5ff' },
+  mind: { label: 'Mind', icon: 'Brain', color: '#b0b0b0' },
   body: { label: 'Body', icon: 'Dumbbell', color: '#ff6e40' },
   work: { label: 'Work', icon: 'Briefcase', color: '#00ff88' },
   wealth: { label: 'Wealth', icon: 'TrendingUp', color: '#ffd740' },
-  spirit: { label: 'Spirit', icon: 'Sparkles', color: '#bf7fff' },
+  spirit: { label: 'Spirit', icon: 'Sparkles', color: '#999999' },
   social: { label: 'Social', icon: 'Users', color: '#ff4081' },
 };
 
 export const DIFFICULTY_CONFIG: Record<Difficulty, { label: string; color: string; xp: number }> = {
   EASY: { label: 'EASY', color: '#00ff88', xp: 50 },
-  MED: { label: 'MED', color: '#00e5ff', xp: 100 },
+  MED: { label: 'MED', color: '#b0b0b0', xp: 100 },
   HARD: { label: 'HARD', color: '#ffd740', xp: 150 },
   LEGENDARY: { label: 'LEGENDARY', color: '#ff6e40', xp: 300 },
 };

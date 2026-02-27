@@ -12,23 +12,21 @@ interface StatCardProps {
   delay?: number;
 }
 
-export default function StatCard({ icon, label, value, sublabel, color = '#228be6', delay = 0 }: StatCardProps) {
+export default function StatCard({ icon, label, value, sublabel, color = '#c0c0c0', delay = 0 }: StatCardProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, delay: delay * 0.04 }}
-      className="bg-white rounded-xl border border-border p-4 shadow-sm"
+      transition={{ duration: 0.35, delay: delay * 0.05 }}
+      className="glass-card rounded-2xl p-4 group"
     >
-      <div className="flex items-center gap-2 mb-2">
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center"
-          style={{ backgroundColor: `${color}15`, color }}
-        >
+      <div className="flex items-center gap-2.5 mb-3">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110"
+          style={{ background: `linear-gradient(135deg, ${color}18, ${color}08)`, color, boxShadow: `0 0 16px ${color}10` }}>
           {icon}
         </div>
       </div>
-      <div className="text-2xl font-bold text-text-primary">{value}</div>
+      <div className="text-2xl font-bold text-text-primary tabular-nums">{value}</div>
       <div className="text-xs text-text-tertiary mt-0.5">{label}</div>
       {sublabel && <div className="text-[11px] text-text-placeholder mt-0.5">{sublabel}</div>}
     </motion.div>

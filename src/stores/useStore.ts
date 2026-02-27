@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import {
   User,
   LifePillar,
@@ -24,6 +25,8 @@ import {
   getPerfectDayBonus,
 } from '@/lib/xp';
 import { format } from 'date-fns';
+import { fireConfetti, firePerfectDay, fireLevelUp } from '@/lib/confetti';
+import { rollCriticalHit, getCritMultiplier, getLoginBonusXP, getLoginBonusLabel } from '@/lib/psychology';
 
 export interface XPHistoryEntry {
   date: string;
@@ -33,7 +36,7 @@ export interface XPHistoryEntry {
 
 export interface Notification {
   id: string;
-  type: 'level_up' | 'streak_milestone' | 'perfect_day' | 'class_change';
+  type: 'level_up' | 'streak_milestone' | 'perfect_day' | 'class_change' | 'critical_hit' | 'login_bonus' | 'commitment_met';
   title: string;
   description: string;
   color: string;
@@ -62,6 +65,34 @@ interface AppState {
   sidebarOpen: boolean;
   showLevelUp: { level: number; pillar?: string } | null;
 
+  // Psychology hooks
+  dailyIntention: string | null;
+  dailyCommitment: number | null;
+  loginBonusClaimed: boolean;
+  consecutiveLogins: number;
+  streakFreezes: number;
+  lastLoginDate: string | null;
+  showCriticalHit: { xp: number; task: string } | null;
+
+  // Appearance
+  backgroundImage: string | null;
+  setBackgroundImage: (url: string | null) => void;
+
+  // Dashboard layout
+  dashboardWidgets: string[];
+  setDashboardWidgets: (widgets: string[]) => void;
+
+  // Google Calendar
+  gcalApiKey: string | null;
+  gcalCalendarId: string | null;
+  setGcalConfig: (apiKey: string | null, calendarId: string | null) => void;
+
+  // iCal imports
+  icalEvents: import('@/lib/icalParser').ICalEvent[];
+  icalSourceName: string | null;
+  setIcalEvents: (events: import('@/lib/icalParser').ICalEvent[], sourceName?: string | null) => void;
+  clearIcalEvents: () => void;
+
   setUser: (user: User | null) => void;
   setPillars: (pillars: LifePillar[]) => void;
   setQuests: (quests: Quest[]) => void;
@@ -79,6 +110,11 @@ interface AppState {
   toggleSubTask: (taskId: string) => void;
   deleteSubTask: (taskId: string) => void;
 
+  // Psychology actions
+  setDailyIntention: (intention: string) => void;
+  setDailyCommitment: (count: number) => void;
+  claimLoginBonus: () => void;
+
   completeQuest: (questId: string) => void;
   addQuest: (quest: Omit<Quest, 'id' | 'user_id' | 'completed' | 'completed_at' | 'created_at' | 'sort_order'>) => void;
   deleteQuest: (questId: string) => void;
@@ -94,7 +130,7 @@ interface AppState {
   getOverallXPProgress: () => { current: number; required: number; percentage: number };
 }
 
-export const useStore = create<AppState>((set, get) => ({
+export const useStore = create<AppState>()(persist((set, get) => ({
   user: null,
   pillars: [],
   quests: [],
@@ -108,7 +144,25 @@ export const useStore = create<AppState>((set, get) => ({
   isLoading: true,
   sidebarOpen: true,
   showLevelUp: null,
+  dailyIntention: null,
+  dailyCommitment: null,
+  loginBonusClaimed: false,
+  consecutiveLogins: 0,
+  streakFreezes: 0,
+  lastLoginDate: null,
+  showCriticalHit: null,
+  backgroundImage: null,
+  dashboardWidgets: [],
+  gcalApiKey: null,
+  gcalCalendarId: null,
+  icalEvents: [],
+  icalSourceName: null,
 
+  setBackgroundImage: (url) => set({ backgroundImage: url }),
+  setDashboardWidgets: (widgets) => set({ dashboardWidgets: widgets }),
+  setGcalConfig: (apiKey, calendarId) => set({ gcalApiKey: apiKey, gcalCalendarId: calendarId }),
+  setIcalEvents: (events, sourceName) => set({ icalEvents: events, icalSourceName: sourceName ?? null }),
+  clearIcalEvents: () => set({ icalEvents: [], icalSourceName: null }),
   setUser: (user) => set({ user }),
   setPillars: (pillars) => set({ pillars }),
   setQuests: (quests) => set({ quests }),
@@ -136,10 +190,59 @@ export const useStore = create<AppState>((set, get) => ({
     set({ subTasks: [...get().subTasks, task] });
   },
   toggleSubTask: (taskId) => {
-    set({ subTasks: get().subTasks.map((t) => t.id === taskId ? { ...t, completed: !t.completed } : t) });
+    const updated = get().subTasks.map((t) => t.id === taskId ? { ...t, completed: !t.completed } : t);
+    set({ subTasks: updated });
+
+    const task = updated.find((t) => t.id === taskId);
+    if (task) {
+      const goalSubs = updated.filter((t) => t.goalId === task.goalId);
+      const doneCount = goalSubs.filter((t) => t.completed).length;
+      const pct = goalSubs.length > 0 ? Math.round((doneCount / goalSubs.length) * 100) : 0;
+      const goals = get().goals.map((g) =>
+        g.id === task.goalId ? { ...g, progress_pct: pct, status: pct >= 100 ? 'completed' as const : 'active' as const } : g
+      );
+      set({ goals });
+      if (pct >= 100) fireConfetti();
+    }
   },
   deleteSubTask: (taskId) => {
     set({ subTasks: get().subTasks.filter((t) => t.id !== taskId) });
+  },
+
+  setDailyIntention: (intention) => set({ dailyIntention: intention || null }),
+  setDailyCommitment: (count) => set({ dailyCommitment: count }),
+
+  claimLoginBonus: () => {
+    const { user, loginBonusClaimed, consecutiveLogins, lastLoginDate, activityLog, xpHistory } = get();
+    if (loginBonusClaimed || !user) return;
+
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const yesterday = format(new Date(Date.now() - 86400000), 'yyyy-MM-dd');
+    const isConsecutive = lastLoginDate === yesterday;
+    const newConsecutive = isConsecutive ? consecutiveLogins + 1 : 1;
+    const bonusXP = getLoginBonusXP(newConsecutive);
+    const label = getLoginBonusLabel(newConsecutive);
+
+    const log: ActivityLogEntry = {
+      id: crypto.randomUUID(), user_id: user.id, action: 'login_bonus',
+      description: `${label} — Day ${newConsecutive} login bonus // +${bonusXP} XP`,
+      xp_earned: bonusXP, pillar: null, created_at: new Date().toISOString(),
+    };
+
+    set({
+      loginBonusClaimed: true,
+      consecutiveLogins: newConsecutive,
+      lastLoginDate: today,
+      user: { ...user, total_xp: user.total_xp + bonusXP },
+      activityLog: [log, ...activityLog].slice(0, 100),
+      xpHistory: [...xpHistory, { date: today, xp: bonusXP, pillar: null }],
+      notifications: [{
+        id: crypto.randomUUID(), timestamp: Date.now(),
+        type: 'login_bonus' as const, title: `${label}!`,
+        description: `Day ${newConsecutive} — +${bonusXP} XP login bonus`,
+        color: '#888888',
+      }, ...get().notifications].slice(0, 20),
+    });
   },
 
   completeQuest: (questId) => {
@@ -156,7 +259,13 @@ export const useStore = create<AppState>((set, get) => ({
     activePillars.add(quest.pillar);
 
     const hour = new Date().getHours();
-    const xpEarned = calculateQuestXP(quest.difficulty, streak, activePillars, hour < 10);
+    let xpEarned = calculateQuestXP(quest.difficulty, streak, activePillars, hour < 10);
+    const isCrit = rollCriticalHit();
+    if (isCrit) {
+      xpEarned = Math.round(xpEarned * getCritMultiplier());
+      set({ showCriticalHit: { xp: xpEarned, task: quest.title } });
+      setTimeout(() => set({ showCriticalHit: null }), 2500);
+    }
     const now = new Date().toISOString();
     const today = format(new Date(), 'yyyy-MM-dd');
 
@@ -190,13 +299,22 @@ export const useStore = create<AppState>((set, get) => ({
       id: crypto.randomUUID(),
       user_id: user?.id || '',
       action: 'quest_completed',
-      description: `QUEST COMPLETE — "${quest.title}" // +${xpEarned} XP // ${quest.pillar.toUpperCase()}`,
+      description: `QUEST COMPLETE — "${quest.title}" // +${xpEarned} XP${isCrit ? ' CRITICAL HIT!' : ''} // ${quest.pillar.toUpperCase()}`,
       xp_earned: xpEarned,
       pillar: quest.pillar,
       created_at: now,
     });
 
     const newNotifications: Omit<Notification, 'id' | 'timestamp'>[] = [];
+
+    if (isCrit) {
+      newNotifications.push({
+        type: 'critical_hit' as const,
+        title: 'CRITICAL HIT!',
+        description: `"${quest.title}" earned 2x XP — +${xpEarned} XP!`,
+        color: '#f0b429',
+      });
+    }
 
     if (newPillarLevel > oldPillarLevel) {
       const pillarLabel = quest.pillar.charAt(0).toUpperCase() + quest.pillar.slice(1);
@@ -220,6 +338,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (newOverallLevel > oldOverallLevel) {
       set({ showLevelUp: { level: newOverallLevel } });
       setTimeout(() => get().setShowLevelUp(null), 3000);
+      fireLevelUp();
       logs.push({
         id: crypto.randomUUID(),
         user_id: user?.id || '',
@@ -236,7 +355,7 @@ export const useStore = create<AppState>((set, get) => ({
         type: 'class_change',
         title: 'CLASS EVOLUTION',
         description: `You evolved from ${oldClass} to ${newClass}!`,
-        color: '#00e5ff',
+        color: '#b0b0b0',
       });
       logs.push({
         id: crypto.randomUUID(),
@@ -296,6 +415,25 @@ export const useStore = create<AppState>((set, get) => ({
       xpHistory: [...xpHistory, newXPEntry],
       notifications: [...newNotifs, ...notifications].slice(0, 20),
     });
+
+    const dailyQuests = updatedQuests.filter((q) => q.quest_type === 'daily');
+    if (dailyQuests.length > 0 && dailyQuests.every((q) => q.completed)) {
+      firePerfectDay();
+    } else {
+      fireConfetti();
+    }
+
+    const { dailyCommitment } = get();
+    if (dailyCommitment) {
+      const totalDone = updatedQuests.filter((q) => q.completed).length;
+      if (totalDone === dailyCommitment) {
+        get().addNotification({
+          type: 'commitment_met', title: 'Commitment Met!',
+          description: `You said ${dailyCommitment} tasks and you did it.`,
+          color: '#3ecf8e',
+        });
+      }
+    }
   },
 
   addQuest: (questData) => {
@@ -385,4 +523,28 @@ export const useStore = create<AppState>((set, get) => ({
     const user = get().user;
     return getXPProgress(user?.total_xp || 0);
   },
+}), {
+  name: 'life-os-storage',
+  partialize: (state) => ({
+    user: state.user,
+    pillars: state.pillars,
+    quests: state.quests,
+    todayCheckin: state.todayCheckin,
+    activityLog: state.activityLog,
+    goals: state.goals,
+    xpHistory: state.xpHistory,
+    subTasks: state.subTasks,
+    consecutiveLogins: state.consecutiveLogins,
+    lastLoginDate: state.lastLoginDate,
+    streakFreezes: state.streakFreezes,
+    dailyIntention: state.dailyIntention,
+    dailyCommitment: state.dailyCommitment,
+    loginBonusClaimed: state.loginBonusClaimed,
+    backgroundImage: state.backgroundImage,
+    dashboardWidgets: state.dashboardWidgets,
+    gcalApiKey: state.gcalApiKey,
+    gcalCalendarId: state.gcalCalendarId,
+    icalEvents: state.icalEvents,
+    icalSourceName: state.icalSourceName,
+  }),
 }));

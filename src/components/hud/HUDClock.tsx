@@ -8,15 +8,11 @@ export default function HUDClock() {
 
   useEffect(() => {
     setTime(new Date());
-    const interval = setInterval(() => setTime(new Date()), 60000);
-    return () => clearInterval(interval);
+    const i = setInterval(() => setTime(new Date()), 60000);
+    return () => clearInterval(i);
   }, []);
 
   if (!time) return null;
 
-  return (
-    <span className="text-sm text-text-tertiary font-medium">
-      {format(time, 'EEE, MMM d · h:mm a')}
-    </span>
-  );
+  return <span className="text-sm text-text-tertiary font-medium">{format(time, 'EEE, MMM d · h:mm a')}</span>;
 }

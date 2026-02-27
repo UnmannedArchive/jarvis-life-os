@@ -8,7 +8,7 @@ import HUDButton from '@/components/hud/HUDButton';
 import XPBar from '@/components/hud/XPBar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, X, Target, Calendar, Award, ChevronDown, ChevronRight, Trash2, Check } from 'lucide-react';
-import { format, differenceInDays } from 'date-fns';
+import { differenceInDays } from 'date-fns';
 
 export default function GoalsPage() {
   const goals = useStore((s) => s.goals);
@@ -54,7 +54,7 @@ export default function GoalsPage() {
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
       <HUDPanel delay={0}>
         <div className="flex items-center justify-between mb-5">
-          <h1 className="text-lg font-bold text-text-primary">Goals</h1>
+          <h1 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Goals</h1>
           <HUDButton size="sm" onClick={() => setShowCreate(true)}>
             <Plus size={14} /> New Goal
           </HUDButton>
@@ -77,7 +77,7 @@ export default function GoalsPage() {
             const daysLeft = goal.target_date ? differenceInDays(new Date(goal.target_date), new Date()) : null;
 
             return (
-              <div key={goal.id} className="rounded-xl border border-border bg-white overflow-hidden">
+              <div key={goal.id} className="rounded-xl border border-border bg-[rgba(255,255,255,0.03)] overflow-hidden">
                 <div className="p-4">
                   <div className="flex items-start gap-2 mb-3">
                     <button onClick={() => setExpandedGoal(expanded ? null : goal.id)} className="mt-0.5 text-text-placeholder hover:text-text-secondary cursor-pointer">
@@ -109,7 +109,7 @@ export default function GoalsPage() {
                       {[25, 50, 75, 100].map((pct) => (
                         <button key={pct} onClick={() => updateProgress(goal.id, pct)}
                           className={`text-[10px] font-medium px-2 py-1 rounded-md cursor-pointer transition-all ${
-                            goal.progress_pct >= pct ? 'bg-accent-light text-accent' : 'text-text-placeholder hover:bg-bg-secondary'
+                            goal.progress_pct >= pct ? 'bg-accent-dim text-accent' : 'text-text-placeholder hover:bg-[rgba(255,255,255,0.04)]'
                           }`}>
                           {pct}%
                         </button>
@@ -121,7 +121,7 @@ export default function GoalsPage() {
                 <AnimatePresence>
                   {expanded && (
                     <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
-                      <div className="p-4 pt-0 border-t border-border bg-bg-secondary/50">
+                      <div className="p-4 pt-0 border-t border-border bg-[rgba(255,255,255,0.02)]">
                         <div className="text-xs font-medium text-text-tertiary mb-2 pt-3">Sub-tasks</div>
                         {subs.length === 0 && <p className="text-xs text-text-placeholder mb-2">Break this goal into smaller steps.</p>}
                         <div className="space-y-1 mb-3">
@@ -140,7 +140,7 @@ export default function GoalsPage() {
                         </div>
                         <div className="flex gap-2">
                           <input type="text" value={subTaskInput} onChange={(e) => setSubTaskInput(e.target.value)}
-                            placeholder="Add a step..." className="flex-1 bg-white border border-border rounded-lg px-2.5 py-1.5 text-sm placeholder:text-text-placeholder"
+                            placeholder="Add a step..." className="flex-1 bg-[rgba(255,255,255,0.03)] border border-border rounded-xl px-2.5 py-1.5 text-sm placeholder:text-text-placeholder"
                             onKeyDown={(e) => e.key === 'Enter' && handleAddSub(goal.id)} />
                           <HUDButton size="sm" variant="secondary" onClick={() => handleAddSub(goal.id)}>Add</HUDButton>
                         </div>
@@ -157,7 +157,7 @@ export default function GoalsPage() {
           <div className="mt-6">
             <div className="text-xs font-medium text-text-tertiary mb-2">Completed ({completed.length})</div>
             {completed.map((g) => (
-              <div key={g.id} className="flex items-center gap-2 p-3 rounded-lg opacity-50">
+              <div key={g.id} className="flex items-center gap-2 p-3 rounded-xl opacity-50">
                 <Award size={14} className="text-success" />
                 <span className="text-sm flex-1">{g.title}</span>
                 <span className="text-xs text-text-placeholder">+{g.xp_reward} XP</span>
@@ -170,37 +170,37 @@ export default function GoalsPage() {
       <AnimatePresence>
         {showCreate && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
             onClick={() => setShowCreate(false)}>
             <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-              className="bg-white rounded-xl shadow-xl border border-border p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+              className="bg-[rgba(255,255,255,0.03)] rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-border p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-5">
-                <h2 className="text-base font-semibold">New Goal</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">New Goal</h2>
                 <button onClick={() => setShowCreate(false)} className="text-text-placeholder hover:text-text-secondary cursor-pointer"><X size={18} /></button>
               </div>
               <div className="flex flex-col gap-4">
                 <div>
                   <label className="text-xs font-medium text-text-secondary block mb-1.5">Title</label>
                   <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What's the big goal?"
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm placeholder:text-text-placeholder" autoFocus />
+                    className="w-full border border-border rounded-xl px-3 py-2 text-sm placeholder:text-text-placeholder" autoFocus />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-text-secondary block mb-1.5">Description</label>
                   <textarea value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Optional details..." rows={2}
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm placeholder:text-text-placeholder resize-none" />
+                    className="w-full border border-border rounded-xl px-3 py-2 text-sm placeholder:text-text-placeholder resize-none" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-medium text-text-secondary block mb-1.5">Pillar</label>
                     <select value={pillar} onChange={(e) => setPillar(e.target.value as Pillar)}
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm">
+                      className="w-full border border-border rounded-xl px-3 py-2 text-sm">
                       {Object.entries(PILLAR_CONFIG).map(([k, v]) => (<option key={k} value={k}>{v.label}</option>))}
                     </select>
                   </div>
                   <div>
                     <label className="text-xs font-medium text-text-secondary block mb-1.5">Target Date</label>
                     <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)}
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+                      className="w-full border border-border rounded-xl px-3 py-2 text-sm" />
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-2">

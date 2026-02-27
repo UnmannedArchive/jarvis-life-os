@@ -11,14 +11,7 @@ interface ProgressRingProps {
   value?: string;
 }
 
-export default function ProgressRing({
-  percentage,
-  size = 80,
-  strokeWidth = 4,
-  color = '#228be6',
-  label,
-  value,
-}: ProgressRingProps) {
+export default function ProgressRing({ percentage, size = 80, strokeWidth = 4, color = '#c0c0c0', label, value }: ProgressRingProps) {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const offset = circumference - (percentage / 100) * circumference;
@@ -27,7 +20,7 @@ export default function ProgressRing({
     <div className="flex flex-col items-center gap-1.5">
       <div className="relative" style={{ width: size, height: size }}>
         <svg width={size} height={size} className="-rotate-90">
-          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#f1f3f5" strokeWidth={strokeWidth} />
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth={strokeWidth} />
           <motion.circle
             cx={size / 2} cy={size / 2} r={radius} fill="none"
             stroke={color} strokeWidth={strokeWidth}
@@ -36,15 +29,16 @@ export default function ProgressRing({
             animate={{ strokeDashoffset: offset }}
             transition={{ duration: 1, ease: 'easeOut' }}
             strokeLinecap="round"
+            style={{ filter: `drop-shadow(0 0 6px ${color}40)` }}
           />
         </svg>
         {value && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-sm font-semibold text-text-primary">{value}</span>
+            <span className="text-sm font-bold text-text-primary tabular-nums">{value}</span>
           </div>
         )}
       </div>
-      {label && <span className="text-[11px] text-text-tertiary font-medium">{label}</span>}
+      {label && <span className="text-[11px] text-text-placeholder font-medium">{label}</span>}
     </div>
   );
 }
