@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useStore } from '@/stores/useStore';
 import { Quest, Pillar, Difficulty, QuestType, PILLAR_CONFIG } from '@/lib/types';
 import { estimateXP } from '@/lib/xpAI';
@@ -56,14 +56,18 @@ export default function QuestsPage() {
   const [newRecurring, setNewRecurring] = useState(false);
   const [newDueDate, setNewDueDate] = useState('');
   const [aiEstimate, setAiEstimate] = useState<{ xp: number; difficulty: Difficulty; reasoning: string } | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     if (newTitle.trim().length >= 3) {
-      const est = estimateXP(newTitle.trim(), newDesc.trim() || null, newPillar, activeTab);
-      setAiEstimate(est);
+      debounceRef.current = setTimeout(() => {
+        setAiEstimate(estimateXP(newTitle.trim(), newDesc.trim() || null, newPillar, activeTab));
+      }, 250);
     } else {
       setAiEstimate(null);
     }
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [newTitle, newDesc, newPillar, activeTab]);
 
   const filtered = useMemo(() => {
@@ -140,11 +144,8 @@ export default function QuestsPage() {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <AnimatePresence mode="popLayout">
             {incomplete.map((quest) => (
-              <motion.div key={quest.id} layout
-                initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, height: 0 }}
+              <div key={quest.id}
                 className="flex items-center gap-3 p-3 rounded-xl border border-border bg-[rgba(255,255,255,0.03)] hover:border-border-hover transition-all group">
                 <button onClick={() => completeQuest(quest.id)}
                   className="w-5 h-5 rounded border-2 border-border-hover hover:border-accent flex items-center justify-center cursor-pointer flex-shrink-0" />
@@ -160,9 +161,8 @@ export default function QuestsPage() {
                   className="opacity-0 group-hover:opacity-100 text-text-placeholder hover:text-danger transition-all cursor-pointer">
                   <Trash2 size={14} />
                 </button>
-              </motion.div>
+              </div>
             ))}
-          </AnimatePresence>
 
           {completed.length > 0 && (
             <div className="mt-4">

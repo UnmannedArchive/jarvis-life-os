@@ -8,8 +8,10 @@ import HUDPanel from '@/components/hud/HUDPanel';
 import HUDButton from '@/components/hud/HUDButton';
 import DifficultyBadge from '@/components/hud/DifficultyBadge';
 import { getLevelFromXP } from '@/lib/xp';
-import { Download, RotateCcw, Check, Image, X, Upload, Link, Calendar, ExternalLink, FileText, Trash2, AlertCircle } from 'lucide-react';
+import { Download, RotateCcw, Check, Image, X, Upload, Link, Calendar, ExternalLink, FileText, Trash2, AlertCircle, LogOut } from 'lucide-react';
 import { parseICalFile, getCalendarName } from '@/lib/icalParser';
+import { supabase } from '@/lib/supabase';
+import { saveUser } from '@/lib/supabaseSync';
 
 interface QuestTemplate {
   title: string;
@@ -47,7 +49,6 @@ export default function SettingsPage() {
   const gcalCalendarId = useStore((s) => s.gcalCalendarId);
   const setGcalConfig = useStore((s) => s.setGcalConfig);
   const [name, setName] = useState(user?.display_name || '');
-  const [email, setEmail] = useState(user?.email || '');
   const [saved, setSaved] = useState(false);
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [customUrl, setCustomUrl] = useState('');
@@ -71,7 +72,9 @@ export default function SettingsPage() {
 
   const handleSave = () => {
     if (user) {
-      setUser({ ...user, display_name: name, email });
+      const updated = { ...user, display_name: name };
+      setUser(updated);
+      saveUser(updated).catch(() => {});
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     }
@@ -126,16 +129,11 @@ export default function SettingsPage() {
             <div className="text-xs text-text-tertiary">Level {level} · {user?.character_class || 'Recruit'} · {user?.total_xp || 0} XP</div>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <div className="mb-4">
           <div>
             <label className="text-xs font-medium text-text-secondary block mb-1.5">Name</label>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-              className="w-full border border-border rounded-xl px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-text-secondary block mb-1.5">Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-border rounded-xl px-3 py-2 text-sm" />
+              className="w-full border border-border rounded-xl px-3 py-2 text-sm max-w-xs" />
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -512,6 +510,17 @@ export default function SettingsPage() {
             <RotateCcw size={14} /> Reset
           </HUDButton>
         </div>
+      </HUDPanel>
+
+      <HUDPanel delay={7}>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary mb-3">Account</h2>
+        <p className="text-xs text-text-tertiary mb-3">Signed in as <strong className="text-text-secondary">{user?.email}</strong></p>
+        <HUDButton variant="danger" size="sm" onClick={async () => {
+          await supabase.auth.signOut();
+          localStorage.removeItem('life-os-storage');
+        }}>
+          <LogOut size={14} /> Sign Out
+        </HUDButton>
       </HUDPanel>
     </div>
   );

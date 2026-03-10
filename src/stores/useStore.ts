@@ -27,6 +27,15 @@ import {
 import { format } from 'date-fns';
 import { fireConfetti, firePerfectDay, fireLevelUp } from '@/lib/confetti';
 import { rollCriticalHit, getCritMultiplier, getLoginBonusXP, getLoginBonusLabel } from '@/lib/psychology';
+import {
+  saveUser,
+  savePillars,
+  upsertQuest,
+  deleteQuestRemote,
+  saveCheckin,
+  saveActivityLogEntries,
+  upsertGoals,
+} from '@/lib/supabaseSync';
 
 export interface XPHistoryEntry {
   date: string;
@@ -93,6 +102,11 @@ interface AppState {
   setIcalEvents: (events: import('@/lib/icalParser').ICalEvent[], sourceName?: string | null) => void;
   clearIcalEvents: () => void;
 
+  // Journal / Vent
+  journalEntries: import('@/lib/reflectAI').JournalEntry[];
+  addJournalEntry: (entry: import('@/lib/reflectAI').JournalEntry) => void;
+  deleteJournalEntry: (id: string) => void;
+
   setUser: (user: User | null) => void;
   setPillars: (pillars: LifePillar[]) => void;
   setQuests: (quests: Quest[]) => void;
@@ -120,6 +134,16 @@ interface AppState {
   deleteQuest: (questId: string) => void;
   submitCheckin: (sleep: number, energy: number, mood: number, notes?: string) => void;
   addLogEntry: (action: string, description: string, xpEarned: number, pillar?: Pillar) => void;
+
+  loadFromCloud: (data: {
+    user: User;
+    pillars: LifePillar[];
+    quests: Quest[];
+    todayCheckin: DailyCheckin | null;
+    activityLog: ActivityLogEntry[];
+    goals: Goal[];
+  }) => void;
+  logout: () => void;
 
   getTodayQuests: () => Quest[];
   getDailyQuests: () => Quest[];
@@ -157,12 +181,15 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   gcalCalendarId: null,
   icalEvents: [],
   icalSourceName: null,
+  journalEntries: [],
 
   setBackgroundImage: (url) => set({ backgroundImage: url }),
   setDashboardWidgets: (widgets) => set({ dashboardWidgets: widgets }),
   setGcalConfig: (apiKey, calendarId) => set({ gcalApiKey: apiKey, gcalCalendarId: calendarId }),
   setIcalEvents: (events, sourceName) => set({ icalEvents: events, icalSourceName: sourceName ?? null }),
   clearIcalEvents: () => set({ icalEvents: [], icalSourceName: null }),
+  addJournalEntry: (entry) => set((s) => ({ journalEntries: [entry, ...s.journalEntries].slice(0, 50) })),
+  deleteJournalEntry: (id) => set((s) => ({ journalEntries: s.journalEntries.filter((e) => e.id !== id) })),
   setUser: (user) => set({ user }),
   setPillars: (pillars) => set({ pillars }),
   setQuests: (quests) => set({ quests }),
@@ -202,6 +229,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
         g.id === task.goalId ? { ...g, progress_pct: pct, status: pct >= 100 ? 'completed' as const : 'active' as const } : g
       );
       set({ goals });
+      upsertGoals(goals).catch(() => {});
       if (pct >= 100) fireConfetti();
     }
   },
@@ -229,11 +257,12 @@ export const useStore = create<AppState>()(persist((set, get) => ({
       xp_earned: bonusXP, pillar: null, created_at: new Date().toISOString(),
     };
 
+    const updatedLoginUser = { ...user, total_xp: user.total_xp + bonusXP };
     set({
       loginBonusClaimed: true,
       consecutiveLogins: newConsecutive,
       lastLoginDate: today,
-      user: { ...user, total_xp: user.total_xp + bonusXP },
+      user: updatedLoginUser,
       activityLog: [log, ...activityLog].slice(0, 100),
       xpHistory: [...xpHistory, { date: today, xp: bonusXP, pillar: null }],
       notifications: [{
@@ -243,6 +272,8 @@ export const useStore = create<AppState>()(persist((set, get) => ({
         color: '#888888',
       }, ...get().notifications].slice(0, 20),
     });
+    saveUser(updatedLoginUser).catch(() => {});
+    saveActivityLogEntries([log]).catch(() => {});
   },
 
   completeQuest: (questId) => {
@@ -416,6 +447,12 @@ export const useStore = create<AppState>()(persist((set, get) => ({
       notifications: [...newNotifs, ...notifications].slice(0, 20),
     });
 
+    const completedQuest = updatedQuests.find((q) => q.id === questId);
+    if (completedQuest) upsertQuest(completedQuest).catch(() => {});
+    if (updatedUser) saveUser(updatedUser).catch(() => {});
+    savePillars(updatedPillars).catch(() => {});
+    saveActivityLogEntries(logs).catch(() => {});
+
     const dailyQuests = updatedQuests.filter((q) => q.quest_type === 'daily');
     if (dailyQuests.length > 0 && dailyQuests.every((q) => q.completed)) {
       firePerfectDay();
@@ -448,10 +485,12 @@ export const useStore = create<AppState>()(persist((set, get) => ({
       sort_order: quests.length,
     };
     set({ quests: [...quests, newQuest] });
+    upsertQuest(newQuest).catch(() => {});
   },
 
   deleteQuest: (questId) => {
     set({ quests: get().quests.filter((q) => q.id !== questId) });
+    deleteQuestRemote(questId).catch(() => {});
   },
 
   submitCheckin: (sleep, energy, mood, notes) => {
@@ -482,6 +521,8 @@ export const useStore = create<AppState>()(persist((set, get) => ({
       todayCheckin: checkin,
       activityLog: [logEntry, ...activityLog].slice(0, 100),
     });
+    saveCheckin(checkin).catch(() => {});
+    saveActivityLogEntries([logEntry]).catch(() => {});
   },
 
   addLogEntry: (action, description, xpEarned, pillar) => {
@@ -496,6 +537,42 @@ export const useStore = create<AppState>()(persist((set, get) => ({
       created_at: new Date().toISOString(),
     };
     set({ activityLog: [entry, ...activityLog].slice(0, 100) });
+    saveActivityLogEntries([entry]).catch(() => {});
+  },
+
+  loadFromCloud: (data) => {
+    set({
+      user: data.user,
+      pillars: data.pillars,
+      quests: data.quests,
+      todayCheckin: data.todayCheckin,
+      activityLog: data.activityLog,
+      goals: data.goals,
+      isAuthenticated: true,
+      isLoading: false,
+    });
+  },
+
+  logout: () => {
+    set({
+      user: null,
+      pillars: [],
+      quests: [],
+      todayCheckin: null,
+      activityLog: [],
+      goals: [],
+      xpHistory: [],
+      notifications: [],
+      subTasks: [],
+      isAuthenticated: false,
+      isLoading: false,
+      dailyIntention: null,
+      dailyCommitment: null,
+      loginBonusClaimed: false,
+      consecutiveLogins: 0,
+      lastLoginDate: null,
+      journalEntries: [],
+    });
   },
 
   getTodayQuests: () => {
@@ -546,5 +623,6 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     gcalCalendarId: state.gcalCalendarId,
     icalEvents: state.icalEvents,
     icalSourceName: state.icalSourceName,
+    journalEntries: state.journalEntries,
   }),
 }));

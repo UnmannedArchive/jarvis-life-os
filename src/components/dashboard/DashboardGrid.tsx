@@ -1,35 +1,36 @@
 'use client';
 
-import { useState, useRef, useCallback, ReactNode, useMemo } from 'react';
+import { useState, useRef, useCallback, ReactNode, useMemo, lazy, Suspense, memo } from 'react';
 import { useStore } from '@/stores/useStore';
 import { WIDGET_REGISTRY, DEFAULT_LAYOUT, getWidgetConfig } from '@/lib/widgets';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   GripVertical, X, Plus, Settings2, Lock,
   Sun, Crosshair, Target, Zap, Gift, CheckSquare, Calendar, CalendarDays,
-  Flame, User, Hexagon, Trophy, ArrowRight, BarChart3, Activity, Gauge,
+  Flame, User, Hexagon, Trophy, ArrowRight, BarChart3, Activity, Gauge, PenLine,
 } from 'lucide-react';
 
-import LoginBonus from '@/components/dashboard/LoginBonus';
-import WelcomeBriefing from '@/components/dashboard/WelcomeBriefing';
-import DailyIntention from '@/components/dashboard/DailyIntention';
-import DailyCommitment from '@/components/dashboard/DailyCommitment';
-import ProgressNudge from '@/components/dashboard/ProgressNudge';
-import PriorityQueue from '@/components/dashboard/PriorityQueue';
-import LifeBalanceRadar from '@/components/dashboard/LifeBalanceRadar';
-import CharacterStatus from '@/components/dashboard/CharacterStatus';
-import StreakCalendar from '@/components/dashboard/StreakCalendar';
-import HabitWeek from '@/components/dashboard/HabitWeek';
-import Achievements from '@/components/dashboard/Achievements';
-import TomorrowHook from '@/components/dashboard/TomorrowHook';
-import EndOfDayReview from '@/components/dashboard/EndOfDayReview';
-import SystemStatus from '@/components/dashboard/SystemStatus';
-import GoogleCalendarWidget from '@/components/dashboard/GoogleCalendarWidget';
-import PerformanceRating from '@/components/dashboard/PerformanceRating';
+const LoginBonus = lazy(() => import('@/components/dashboard/LoginBonus'));
+const WelcomeBriefing = lazy(() => import('@/components/dashboard/WelcomeBriefing'));
+const DailyIntention = lazy(() => import('@/components/dashboard/DailyIntention'));
+const DailyCommitment = lazy(() => import('@/components/dashboard/DailyCommitment'));
+const ProgressNudge = lazy(() => import('@/components/dashboard/ProgressNudge'));
+const PriorityQueue = lazy(() => import('@/components/dashboard/PriorityQueue'));
+const LifeBalanceRadar = lazy(() => import('@/components/dashboard/LifeBalanceRadar'));
+const CharacterStatus = lazy(() => import('@/components/dashboard/CharacterStatus'));
+const StreakCalendar = lazy(() => import('@/components/dashboard/StreakCalendar'));
+const HabitWeek = lazy(() => import('@/components/dashboard/HabitWeek'));
+const Achievements = lazy(() => import('@/components/dashboard/Achievements'));
+const TomorrowHook = lazy(() => import('@/components/dashboard/TomorrowHook'));
+const EndOfDayReview = lazy(() => import('@/components/dashboard/EndOfDayReview'));
+const SystemStatus = lazy(() => import('@/components/dashboard/SystemStatus'));
+const GoogleCalendarWidget = lazy(() => import('@/components/dashboard/GoogleCalendarWidget'));
+const PerformanceRating = lazy(() => import('@/components/dashboard/PerformanceRating'));
+const VentJournal = lazy(() => import('@/components/dashboard/VentJournal'));
 
 const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   Sun, Crosshair, Target, Zap, Gift, CheckSquare, Calendar, CalendarDays,
-  Flame, User, Hexagon, Trophy, ArrowRight, BarChart3, Activity, Gauge,
+  Flame, User, Hexagon, Trophy, ArrowRight, BarChart3, Activity, Gauge, PenLine,
 };
 
 const WIDGET_COMPONENTS: Record<string, React.ComponentType> = {
@@ -45,11 +46,16 @@ const WIDGET_COMPONENTS: Record<string, React.ComponentType> = {
   radar: LifeBalanceRadar,
   achievements: Achievements,
   performance: PerformanceRating,
+  journal: VentJournal,
   tomorrow: TomorrowHook,
   review: EndOfDayReview,
   system: SystemStatus,
   gcalendar: GoogleCalendarWidget,
 };
+
+function WidgetFallback() {
+  return <div className="rounded-2xl bg-[rgba(255,255,255,0.02)] animate-pulse h-24" />;
+}
 
 function WidgetIcon({ name, size = 14, className }: { name: string; size?: number; className?: string }) {
   const Icon = ICON_MAP[name];
@@ -68,66 +74,48 @@ interface WidgetWrapperProps {
   children: ReactNode;
 }
 
-function WidgetWrapper({ id, editing, onRemove, onDragStart, onDragOver, onDragEnd, isDragging, isOver, children }: WidgetWrapperProps) {
-  const config = getWidgetConfig(id);
+const WidgetWrapper = memo(function WidgetWrapper({ id, editing, onRemove, onDragStart, onDragOver, onDragEnd, isDragging, isOver, children }: WidgetWrapperProps) {
+  if (!editing) {
+    return <div className="relative">{children}</div>;
+  }
 
   return (
     <motion.div
       layout
       layoutId={id}
       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-      draggable={editing}
+      draggable
       onDragStart={() => onDragStart(id)}
       onDragOver={(e) => onDragOver(e as unknown as React.DragEvent, id)}
       onDragEnd={onDragEnd}
-      className={`relative transition-all ${
-        editing ? 'cursor-grab active:cursor-grabbing' : ''
-      } ${isDragging ? 'opacity-30 scale-95' : ''} ${
-        isOver ? 'ring-2 ring-accent/40 ring-offset-2 ring-offset-bg rounded-2xl' : ''
-      }`}
+      className={`relative cursor-grab active:cursor-grabbing ${
+        isDragging ? 'opacity-30 scale-95' : ''
+      } ${isOver ? 'ring-2 ring-accent/40 ring-offset-2 ring-offset-bg rounded-2xl' : ''}`}
     >
-      {editing && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="absolute -top-2 -right-2 z-20 flex items-center gap-1"
+      <div className="absolute -top-2 -right-2 z-20 flex items-center gap-1">
+        <button
+          onClick={(e) => { e.stopPropagation(); onRemove(id); }}
+          className="w-6 h-6 rounded-full bg-danger/90 text-white flex items-center justify-center
+            shadow-lg hover:bg-danger transition-colors cursor-pointer backdrop-blur-sm"
         >
-          <button
-            onClick={(e) => { e.stopPropagation(); onRemove(id); }}
-            className="w-6 h-6 rounded-full bg-danger/90 text-white flex items-center justify-center
-              shadow-lg hover:bg-danger transition-colors cursor-pointer backdrop-blur-sm"
-          >
-            <X size={12} strokeWidth={3} />
-          </button>
-        </motion.div>
-      )}
+          <X size={12} strokeWidth={3} />
+        </button>
+      </div>
 
-      {editing && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="absolute -top-2 -left-2 z-20"
-        >
-          <div className="w-6 h-6 rounded-full bg-bg-elevated border border-border flex items-center justify-center shadow-lg backdrop-blur-sm">
-            <GripVertical size={11} className="text-text-placeholder" />
-          </div>
-        </motion.div>
-      )}
+      <div className="absolute -top-2 -left-2 z-20">
+        <div className="w-6 h-6 rounded-full bg-bg-elevated border border-border flex items-center justify-center shadow-lg backdrop-blur-sm">
+          <GripVertical size={11} className="text-text-placeholder" />
+        </div>
+      </div>
 
-      {editing && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.6 }}
-          className="absolute inset-0 z-10 rounded-2xl border-2 border-dashed border-accent/20 pointer-events-none"
-        />
-      )}
+      <div className="absolute inset-0 z-10 rounded-2xl border-2 border-dashed border-accent/20 pointer-events-none opacity-60" />
 
-      <div className={editing ? 'pointer-events-none select-none' : ''}>
+      <div className="pointer-events-none select-none">
         {children}
       </div>
     </motion.div>
   );
-}
+});
 
 function WidgetPicker({ activeWidgets, onAdd, onClose }: { activeWidgets: string[]; onAdd: (id: string) => void; onClose: () => void }) {
   const available = WIDGET_REGISTRY.filter((w) => !activeWidgets.includes(w.id));
@@ -313,7 +301,7 @@ export default function DashboardGrid() {
             isDragging={dragId === item.id}
             isOver={overId === item.id}
           >
-            <Component />
+            <Suspense fallback={<WidgetFallback />}><Component /></Suspense>
           </WidgetWrapper>
         );
       })}
@@ -337,7 +325,7 @@ export default function DashboardGrid() {
                   isDragging={dragId === item.id}
                   isOver={overId === item.id}
                 >
-                  <Component />
+                  <Suspense fallback={<WidgetFallback />}><Component /></Suspense>
                 </WidgetWrapper>
               );
             })}
@@ -358,7 +346,7 @@ export default function DashboardGrid() {
                   isDragging={dragId === item.id}
                   isOver={overId === item.id}
                 >
-                  <Component />
+                  <Suspense fallback={<WidgetFallback />}><Component /></Suspense>
                 </WidgetWrapper>
               );
             })}
@@ -382,7 +370,7 @@ export default function DashboardGrid() {
               isDragging={dragId === item.id}
               isOver={overId === item.id}
             >
-              <Component />
+              <Suspense fallback={<WidgetFallback />}><Component /></Suspense>
             </WidgetWrapper>
           </div>
         );

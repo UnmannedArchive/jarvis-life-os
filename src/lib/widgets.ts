@@ -20,6 +20,7 @@ export const WIDGET_REGISTRY: WidgetConfig[] = [
   { id: 'radar', label: 'Life Balance', description: 'Pillar radar chart', defaultSize: 'small', icon: 'Hexagon' },
   { id: 'achievements', label: 'Achievements', description: 'Badges & milestones', defaultSize: 'small', icon: 'Trophy' },
   { id: 'gcalendar', label: 'Google Calendar', description: 'Upcoming events from Google Calendar', defaultSize: 'small', icon: 'CalendarDays' },
+  { id: 'journal', label: 'Reflect', description: 'Vent about your day with AI insights', defaultSize: 'full', icon: 'PenLine' },
   { id: 'tomorrow', label: 'Tomorrow', description: 'Preview of what\'s next', defaultSize: 'full', icon: 'ArrowRight' },
   { id: 'review', label: 'Day Review', description: 'End-of-day summary', defaultSize: 'full', icon: 'BarChart3' },
   { id: 'system', label: 'System Status', description: 'System indicators', defaultSize: 'full', icon: 'Activity' },
@@ -28,7 +29,7 @@ export const WIDGET_REGISTRY: WidgetConfig[] = [
 export const DEFAULT_LAYOUT: string[] = [
   'login_bonus', 'welcome', 'intention', 'commitment', 'nudge',
   'tasks', 'performance', 'character', 'habits', 'radar', 'streak', 'achievements',
-  'tomorrow', 'review', 'system',
+  'journal', 'tomorrow', 'review', 'system',
 ];
 
 export function getWidgetConfig(id: string): WidgetConfig | undefined {

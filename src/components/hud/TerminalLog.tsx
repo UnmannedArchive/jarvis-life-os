@@ -110,8 +110,7 @@ export default function TerminalLog() {
     (search.trim() ? 1 : 0);
 
   return (
-    <motion.div
-      layout
+    <div
       className="border-t border-border bg-[rgba(0,0,0,0.95)] backdrop-blur-xl relative"
     >
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/8 to-transparent" />
@@ -363,8 +362,7 @@ export default function TerminalLog() {
                           </div>
                         )}
 
-                        <motion.div
-                          layout
+                        <div
                           onClick={() => setSelectedEntry(isSelected ? null : entry.id)}
                           className={`group flex flex-col rounded-lg transition-all cursor-pointer ${
                             isSelected
@@ -451,7 +449,7 @@ export default function TerminalLog() {
                               </motion.div>
                             )}
                           </AnimatePresence>
-                        </motion.div>
+                        </div>
                       </div>
                     );
                   })}
@@ -472,6 +470,6 @@ export default function TerminalLog() {
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 }

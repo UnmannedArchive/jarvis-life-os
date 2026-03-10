@@ -2,7 +2,7 @@
 
 import { useEffect, useState, ReactNode } from 'react';
 import { useStore } from '@/stores/useStore';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileNav from '@/components/layout/MobileNav';
@@ -12,70 +12,102 @@ import NotificationToast from '@/components/hud/NotificationToast';
 import CriticalHitOverlay from '@/components/dashboard/CriticalHitOverlay';
 import KeyboardShortcuts from '@/components/providers/KeyboardShortcuts';
 import UndoToast from '@/components/hud/UndoToast';
-import Onboarding from '@/components/providers/Onboarding';
-import { Pillar } from '@/lib/types';
-
-const ALL_PILLARS: Pillar[] = ['mind', 'body', 'work', 'wealth', 'spirit', 'social'];
-
-function initializeBlankUser(store: ReturnType<typeof useStore.getState>, name: string = 'User') {
-  store.setUser({
-    id: 'local-user', email: '', display_name: name,
-    created_at: new Date().toISOString(), total_xp: 0,
-    current_streak: 0, longest_streak: 0, character_class: 'RECRUIT', avatar_url: null,
-  });
-  store.setPillars(ALL_PILLARS.map((pillar) => ({
-    id: crypto.randomUUID(), user_id: 'local-user', pillar,
-    current_xp: 0, level: 1, streak: 0, last_activity_date: null,
-  })));
-  store.setIsLoading(false);
-  store.setIsAuthenticated(true);
-}
+import { supabase } from '@/lib/supabase';
+import { loadUserData, createNewUser } from '@/lib/supabaseSync';
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const isAuthPage = pathname === '/login' || pathname === '/signup';
-  const isLoading = useStore((s) => s.isLoading);
   const user = useStore((s) => s.user);
   const backgroundImage = useStore((s) => s.backgroundImage);
-  const [hydrated, setHydrated] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const loadFromCloud = useStore((s) => s.loadFromCloud);
+  const logout = useStore((s) => s.logout);
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    const unsub = useStore.persist.onFinishHydration(() => {
-      setHydrated(true);
-      const state = useStore.getState();
-      if (state.user) {
-        state.setIsLoading(false);
-        state.setIsAuthenticated(true);
-      }
-    });
+    let mounted = true;
 
-    if (useStore.persist.hasHydrated()) {
-      setHydrated(true);
-      const state = useStore.getState();
-      if (state.user) {
-        state.setIsLoading(false);
-        state.setIsAuthenticated(true);
+    async function initSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        if (mounted) {
+          setChecking(false);
+          if (!isAuthPage) router.replace('/login');
+        }
+        return;
       }
+
+      const authUser = session.user;
+      let data = await loadUserData(authUser.id);
+
+      if (!data.user) {
+        const displayName =
+          (authUser.user_metadata?.display_name as string) ||
+          authUser.email?.split('@')[0] ||
+          'User';
+        data = await createNewUser(authUser.id, authUser.email!, displayName);
+      }
+
+      if (data.user && mounted) {
+        loadFromCloud({
+          user: data.user,
+          pillars: data.pillars,
+          quests: data.quests,
+          todayCheckin: data.todayCheckin,
+          activityLog: data.activityLog,
+          goals: data.goals,
+        });
+      }
+
+      if (mounted) setChecking(false);
     }
 
-    return unsub;
-  }, []);
+    initSession();
 
-  useEffect(() => {
-    if (hydrated && !user) {
-      setShowOnboarding(true);
-    }
-  }, [hydrated, user]);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_OUT') {
+          logout();
+          router.replace('/login');
+        }
 
-  const handleOnboardingComplete = (name: string) => {
-    initializeBlankUser(useStore.getState(), name);
-    setShowOnboarding(false);
-  };
+        if (event === 'SIGNED_IN' && session) {
+          const authUser = session.user;
+          let data = await loadUserData(authUser.id);
+
+          if (!data.user) {
+            const displayName =
+              (authUser.user_metadata?.display_name as string) ||
+              authUser.email?.split('@')[0] ||
+              'User';
+            data = await createNewUser(authUser.id, authUser.email!, displayName);
+          }
+
+          if (data.user) {
+            loadFromCloud({
+              user: data.user,
+              pillars: data.pillars,
+              quests: data.quests,
+              todayCheckin: data.todayCheckin,
+              activityLog: data.activityLog,
+              goals: data.goals,
+            });
+          }
+        }
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isAuthPage) return <>{children}</>;
 
-  if (!hydrated || (isLoading && !showOnboarding)) {
+  if (checking) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-bg ambient-bg">
         <div className="w-10 h-10 border-2 border-border border-t-accent rounded-full animate-spin shadow-[0_0_20px_rgba(200,200,200,0.15)]" />
@@ -83,8 +115,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
-  if (showOnboarding) {
-    return <Onboarding onComplete={handleOnboardingComplete} />;
+  if (!user) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-bg ambient-bg">
+        <div className="w-10 h-10 border-2 border-border border-t-accent rounded-full animate-spin shadow-[0_0_20px_rgba(200,200,200,0.15)]" />
+      </div>
+    );
   }
 
   return (

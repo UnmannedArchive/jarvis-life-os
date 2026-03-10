@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, memo } from 'react';
 import { useStore } from '@/stores/useStore';
 import { prioritizeQuests } from '@/lib/priority';
 import { PILLAR_CONFIG, Pillar, Difficulty, Quest } from '@/lib/types';
@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Plus, X, Sparkles, Brain } from 'lucide-react';
 import { captureUndoState } from '@/components/hud/UndoToast';
 
-function QuestCard({ quest }: { quest: Quest }) {
+const QuestCard = memo(function QuestCard({ quest }: { quest: Quest }) {
   const completeQuest = useStore((s) => s.completeQuest);
   const [xpPop, setXpPop] = useState(false);
   const cfg = PILLAR_CONFIG[quest.pillar];
@@ -26,8 +26,7 @@ function QuestCard({ quest }: { quest: Quest }) {
   }, [quest.id, quest.completed, completeQuest]);
 
   return (
-    <motion.div layout initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: 30, height: 0 }}
+    <div
       className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all relative group ${
         quest.completed
           ? 'bg-[rgba(0,0,0,0.3)] border-[rgba(255,255,255,0.03)] opacity-40'
@@ -55,9 +54,9 @@ function QuestCard({ quest }: { quest: Quest }) {
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
-}
+});
 
 export default function PriorityQueue() {
   const quests = useStore((s) => s.quests);
@@ -69,14 +68,18 @@ export default function PriorityQueue() {
   const [pillar, setPillar] = useState<Pillar>('work');
   const [type, setType] = useState<'daily' | 'side'>('daily');
   const [aiEstimate, setAiEstimate] = useState<{ xp: number; difficulty: Difficulty; reasoning: string } | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     if (title.trim().length >= 3) {
-      const est = estimateXP(title.trim(), null, pillar, type);
-      setAiEstimate(est);
+      debounceRef.current = setTimeout(() => {
+        setAiEstimate(estimateXP(title.trim(), null, pillar, type));
+      }, 250);
     } else {
       setAiEstimate(null);
     }
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [title, pillar, type]);
 
   const list = useMemo(() => {
@@ -142,9 +145,7 @@ export default function PriorityQueue() {
       </AnimatePresence>
 
       <div className="flex flex-col gap-1.5">
-        <AnimatePresence mode="popLayout">
           {list.map((q) => <QuestCard key={q.id} quest={q} />)}
-        </AnimatePresence>
         {list.length === 0 && (
           <div className="text-center py-14">
             <Sparkles size={28} className="mx-auto mb-3 text-text-placeholder opacity-20" />

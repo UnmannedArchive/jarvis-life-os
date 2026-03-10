@@ -357,7 +357,10 @@ export default function Hourglass({ progress, running, mode, width = 180, height
       ctx.fillRect(cx - 18, midY - 18, 36, 36);
     }
 
-    animFrameRef.current = requestAnimationFrame(draw);
+    const settled = !running && Math.abs(progress - smoothProgressRef.current) < 0.001 && particlesRef.current.length === 0;
+    if (!settled) {
+      animFrameRef.current = requestAnimationFrame(draw);
+    }
   }, [progress, running, width, height, sandColor, sandColorDim, sandColorBright, cx, topY, botY, midY, neckHalf, topW, topSandMaxH, botSandMaxH, drawGlassShape, getWidthAtY, glassStroke, glassHighlight]);
 
   useEffect(() => {
@@ -366,6 +369,7 @@ export default function Hourglass({ progress, running, mode, width = 180, height
 
   useEffect(() => {
     lastTimeRef.current = 0;
+    cancelAnimationFrame(animFrameRef.current);
     animFrameRef.current = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animFrameRef.current);
   }, [draw]);
