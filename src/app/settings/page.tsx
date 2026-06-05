@@ -8,9 +8,9 @@ import HUDPanel from '@/components/hud/HUDPanel';
 import HUDButton from '@/components/hud/HUDButton';
 import DifficultyBadge from '@/components/hud/DifficultyBadge';
 import { getLevelFromXP } from '@/lib/xp';
-import { Download, RotateCcw, Check, Image, X, Upload, Link, Calendar, ExternalLink, FileText, Trash2, AlertCircle, LogOut } from 'lucide-react';
+import { Download, RotateCcw, Check, Image, X, Upload, Link as LinkIcon, Calendar, ExternalLink, FileText, Trash2, AlertCircle, Activity } from 'lucide-react';
 import { parseICalFile, getCalendarName } from '@/lib/icalParser';
-import { supabase } from '@/lib/supabase';
+import RecurringTasksManager from '@/components/dashboard/RecurringTasksManager';
 import { saveUser } from '@/lib/supabaseSync';
 
 interface QuestTemplate {
@@ -48,6 +48,8 @@ export default function SettingsPage() {
   const gcalApiKey = useStore((s) => s.gcalApiKey);
   const gcalCalendarId = useStore((s) => s.gcalCalendarId);
   const setGcalConfig = useStore((s) => s.setGcalConfig);
+  const workflowEnabled = useStore((s) => s.workflowEnabled);
+  const setWorkflowEnabled = useStore((s) => s.setWorkflowEnabled);
   const [name, setName] = useState(user?.display_name || '');
   const [saved, setSaved] = useState(false);
   const [added, setAdded] = useState<Set<string>>(new Set());
@@ -64,6 +66,7 @@ export default function SettingsPage() {
   const clearIcalEvents = useStore((s) => s.clearIcalEvents);
   const [icalError, setIcalError] = useState<string | null>(null);
   const [icalSuccess, setIcalSuccess] = useState<string | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const icalFileRef = useRef<HTMLInputElement>(null);
 
@@ -117,7 +120,13 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-4">
+    <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-4 settings-sections">
+      {user?.id === 'guest' && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 mb-2">
+          <p className="text-sm font-medium text-amber-200">Using the app without an account.</p>
+          <p className="text-xs text-text-tertiary mt-1">Your progress is saved only on this device. Sign in or create an account to sync across devices.</p>
+        </div>
+      )}
       <HUDPanel delay={0}>
         <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary mb-4">Profile</h2>
         <div className="flex items-center gap-4 mb-5">
@@ -126,7 +135,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <div className="text-sm font-medium text-text-primary">{name || 'Unnamed'}</div>
-            <div className="text-xs text-text-tertiary">Level {level} · {user?.character_class || 'Recruit'} · {user?.total_xp || 0} XP</div>
+            <div className="text-xs text-text-tertiary">Level {level} · {user?.total_xp || 0} XP</div>
           </div>
         </div>
         <div className="mb-4">
@@ -139,6 +148,26 @@ export default function SettingsPage() {
         <div className="flex items-center gap-3">
           <HUDButton size="sm" onClick={handleSave}>Save</HUDButton>
           {saved && <span className="text-xs font-medium text-success">Saved!</span>}
+        </div>
+      </HUDPanel>
+
+      <HUDPanel delay={1}>
+        <div className="flex items-center gap-2 mb-1">
+          <Activity size={13} className="text-accent" />
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Workflow</h2>
+        </div>
+        <p className="text-xs text-text-tertiary mb-4">Track which apps you use and see your most-productive hours. Requires the local collector (see <code>monitor/README.md</code>).</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm text-text-primary">Workflow tracking</div>
+            <div className="text-xs text-text-tertiary">Show the Workflow tab and read local monitor data.</div>
+          </div>
+          <button
+            onClick={() => setWorkflowEnabled(!workflowEnabled)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer ${workflowEnabled ? 'bg-accent-dim text-accent' : 'bg-[rgba(255,255,255,0.05)] text-text-tertiary'}`}
+          >
+            {workflowEnabled ? 'On' : 'Off'}
+          </button>
         </div>
       </HUDPanel>
 
@@ -205,7 +234,7 @@ export default function SettingsPage() {
             </div>
           ) : (
             <HUDButton size="sm" variant="secondary" onClick={() => setShowUrlInput(true)}>
-              <Link size={13} /> URL
+              <LinkIcon size={13} /> URL
             </HUDButton>
           )}
 
@@ -469,6 +498,12 @@ export default function SettingsPage() {
       </HUDPanel>
 
       <HUDPanel delay={5}>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary mb-1">Recurring Tasks</h2>
+        <p className="text-xs text-text-tertiary mb-4">Standing routines that auto-populate &ldquo;Today&apos;s Plan&rdquo; on their scheduled days.</p>
+        <RecurringTasksManager />
+      </HUDPanel>
+
+      <HUDPanel delay={6}>
         <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary mb-1">Quick-Add Templates</h2>
         <p className="text-xs text-text-tertiary mb-4">Pre-built daily tasks you can add in one click.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -506,7 +541,7 @@ export default function SettingsPage() {
           <HUDButton variant="secondary" size="sm" onClick={handleExport}>
             <Download size={14} /> Export
           </HUDButton>
-          <HUDButton variant="danger" size="sm" onClick={() => { if (confirm('Reset all progress? This cannot be undone.')) { localStorage.removeItem('life-os-storage'); window.location.reload(); } }}>
+          <HUDButton variant="danger" size="sm" onClick={() => setShowResetConfirm(true)}>
             <RotateCcw size={14} /> Reset
           </HUDButton>
         </div>
@@ -514,14 +549,33 @@ export default function SettingsPage() {
 
       <HUDPanel delay={7}>
         <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary mb-3">Account</h2>
-        <p className="text-xs text-text-tertiary mb-3">Signed in as <strong className="text-text-secondary">{user?.email}</strong></p>
-        <HUDButton variant="danger" size="sm" onClick={async () => {
-          await supabase.auth.signOut();
-          localStorage.removeItem('life-os-storage');
-        }}>
-          <LogOut size={14} /> Sign Out
-        </HUDButton>
+        <p className="text-xs text-text-tertiary">Local mode — progress is saved in this browser.</p>
       </HUDPanel>
+
+      {showResetConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reset-dialog-title"
+        >
+          <div className="bg-bg-card border border-border rounded-xl shadow-2xl max-w-sm w-full p-5">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-danger/20 flex items-center justify-center flex-shrink-0">
+                <AlertCircle size={20} className="text-danger" />
+              </div>
+              <div>
+                <h2 id="reset-dialog-title" className="text-sm font-semibold text-text-primary">Reset all data?</h2>
+                <p className="text-xs text-text-secondary mt-1">This will permanently delete all tasks, check-ins, goals, and progress from this device. This cannot be undone.</p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <HUDButton variant="secondary" size="sm" onClick={() => setShowResetConfirm(false)}>Cancel</HUDButton>
+              <HUDButton variant="danger" size="sm" onClick={() => { localStorage.removeItem('life-os-storage'); setShowResetConfirm(false); window.location.reload(); }}>Reset everything</HUDButton>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
