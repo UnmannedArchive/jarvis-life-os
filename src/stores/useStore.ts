@@ -8,12 +8,15 @@ import {
   Quest,
   DailyCheckin,
   ActivityLogEntry,
+  ActivityFeedEntry,
+  FocusSession,
   Goal,
   Pillar,
   Difficulty,
   QuestType,
   DIFFICULTY_CONFIG,
 } from '@/lib/types';
+import { migrateStore } from '@/lib/migrations';
 import {
   calculateQuestXP,
   getLevelFromXP,
@@ -36,6 +39,7 @@ import {
   saveActivityLogEntries,
   upsertGoals,
 } from '@/lib/supabaseSync';
+import { parseCheckinFlags } from '@/lib/checkinFlags';
 
 export interface XPHistoryEntry {
   date: string;
@@ -107,6 +111,47 @@ interface AppState {
   addJournalEntry: (entry: import('@/lib/reflectAI').JournalEntry) => void;
   deleteJournalEntry: (id: string) => void;
 
+  // Ideas & Inventions
+  ideas: import('@/lib/ideasOrganizer').StoredIdea[];
+  addIdea: (idea: import('@/lib/ideasOrganizer').StoredIdea) => void;
+  deleteIdea: (id: string) => void;
+
+  // Recurring tasks — auto-populate the daily planner on their scheduled days.
+  recurringTasks: import('@/lib/recurring').RecurringTask[];
+  addRecurringTask: (name: string, days: number[]) => void;
+  updateRecurringTask: (id: string, patch: Partial<{ name: string; days: number[] }>) => void;
+  deleteRecurringTask: (id: string) => void;
+
+  // Activity feed (new panel)
+  activityFeed: ActivityFeedEntry[];
+  addActivity: (entry: Omit<ActivityFeedEntry, 'id' | 'timestamp' | 'pinned' | 'dismissed'>) => void;
+  pinActivity: (id: string) => void;
+  dismissActivity: (id: string) => void;
+  clearActivityLog: () => void;
+
+  // Focus sessions & check-in history
+  focusSessions: FocusSession[];
+  checkinHistory: { date: string; sleep: number; energy: number; mood: number }[];
+  addFocusSession: (session: Omit<FocusSession, 'id' | 'startedAt' | 'completedAt' | 'xpEarned' | 'distractionCount'>) => void;
+  completeFocusSession: (id: string, actualMinutes: number, distractionCount: number, notes?: string) => void;
+
+  // Preferences
+  theme: 'dark' | 'light';
+  accentColor: string;
+  compactMode: boolean;
+  notificationPrefs: { streakReminder: boolean; dailyCheckin: boolean; achievements: boolean; browserNotifications: boolean };
+  customPillarNames: Record<string, string>;
+  setTheme: (theme: 'dark' | 'light') => void;
+  setAccentColor: (color: string) => void;
+  setCompactMode: (v: boolean) => void;
+  setNotificationPrefs: (p: Partial<AppState['notificationPrefs']>) => void;
+
+  // Onboarding
+  onboardingComplete: boolean;
+  onboardingStep: number;
+  completeOnboardingStep: (step: number) => void;
+  finishOnboarding: () => void;
+
   setUser: (user: User | null) => void;
   setPillars: (pillars: LifePillar[]) => void;
   setQuests: (quests: Quest[]) => void;
@@ -152,10 +197,30 @@ interface AppState {
   getPillarData: (pillar: Pillar) => LifePillar | undefined;
   getOverallLevel: () => number;
   getOverallXPProgress: () => { current: number; required: number; percentage: number };
+
+  // Workflow / productivity tracking
+  workflowEnabled: boolean;
+  setWorkflowEnabled: (on: boolean) => void;
+  workflowCategoryOverrides: Record<string, 'focus' | 'neutral' | 'distraction'>;
+  setWorkflowCategory: (app: string, category: 'focus' | 'neutral' | 'distraction') => void;
+  workflowSummary: { date: string; text: string } | null;
+  setWorkflowSummary: (date: string, text: string) => void;
 }
 
+const GUEST_USER: User = {
+  id: 'guest',
+  email: '',
+  display_name: 'Guest',
+  created_at: new Date().toISOString(),
+  total_xp: 0,
+  current_streak: 0,
+  longest_streak: 0,
+  character_class: 'RECRUIT',
+  avatar_url: null,
+};
+
 export const useStore = create<AppState>()(persist((set, get) => ({
-  user: null,
+  user: GUEST_USER,
   pillars: [],
   quests: [],
   todayCheckin: null,
@@ -182,6 +247,21 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   icalEvents: [],
   icalSourceName: null,
   journalEntries: [],
+  ideas: [],
+  recurringTasks: [],
+  activityFeed: [],
+  focusSessions: [],
+  checkinHistory: [],
+  theme: 'dark',
+  accentColor: '#F59E0B',
+  compactMode: false,
+  notificationPrefs: { streakReminder: true, dailyCheckin: true, achievements: true, browserNotifications: false },
+  customPillarNames: {},
+  onboardingComplete: false,
+  onboardingStep: 0,
+  workflowEnabled: true,
+  workflowCategoryOverrides: {},
+  workflowSummary: null,
 
   setBackgroundImage: (url) => set({ backgroundImage: url }),
   setDashboardWidgets: (widgets) => set({ dashboardWidgets: widgets }),
@@ -190,11 +270,87 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   clearIcalEvents: () => set({ icalEvents: [], icalSourceName: null }),
   addJournalEntry: (entry) => set((s) => ({ journalEntries: [entry, ...s.journalEntries].slice(0, 50) })),
   deleteJournalEntry: (id) => set((s) => ({ journalEntries: s.journalEntries.filter((e) => e.id !== id) })),
+  addIdea: (idea) => set((s) => ({ ideas: [idea, ...s.ideas].slice(0, 200) })),
+  deleteIdea: (id) => set((s) => ({ ideas: s.ideas.filter((i) => i.id !== id) })),
+
+  addRecurringTask: (name, days) =>
+    set((s) => ({
+      recurringTasks: [
+        ...s.recurringTasks,
+        { id: crypto.randomUUID(), name: name.trim(), days: Array.from(new Set(days)).sort((a, b) => a - b) },
+      ],
+    })),
+  updateRecurringTask: (id, patch) =>
+    set((s) => ({
+      recurringTasks: s.recurringTasks.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+              ...(patch.days !== undefined
+                ? { days: Array.from(new Set(patch.days)).sort((a, b) => a - b) }
+                : {}),
+            }
+          : t,
+      ),
+    })),
+  deleteRecurringTask: (id) =>
+    set((s) => ({ recurringTasks: s.recurringTasks.filter((t) => t.id !== id) })),
+  addActivity: (entry) => set((s) => ({
+    activityFeed: [{
+      ...entry,
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      pinned: false,
+      dismissed: false,
+    }, ...s.activityFeed].slice(0, 200),
+  })),
+  pinActivity: (id) => set((s) => ({
+    activityFeed: s.activityFeed.map((e) => (e.id === id ? { ...e, pinned: !e.pinned } : e)),
+  })),
+  dismissActivity: (id) => set((s) => ({
+    activityFeed: s.activityFeed.map((e) => (e.id === id ? { ...e, dismissed: true } : e)),
+  })),
+  clearActivityLog: () => set({ activityFeed: [] }),
+  addFocusSession: (session) => set((s) => ({
+    focusSessions: [{
+      ...session,
+      id: crypto.randomUUID(),
+      startedAt: new Date().toISOString(),
+      completedAt: null,
+      xpEarned: 0,
+      distractionCount: 0,
+    }, ...s.focusSessions].slice(0, 100),
+  })),
+  completeFocusSession: (id, actualMinutes, distractionCount, notes) => {
+    const { focusSessions } = get();
+    const session = focusSessions.find((f) => f.id === id);
+    if (!session) return;
+    const xpEarned = actualMinutes * 2 + (distractionCount === 0 ? 25 : 0);
+    set({
+      focusSessions: focusSessions.map((f) =>
+        f.id === id
+          ? { ...f, actualMinutes, distractionCount, xpEarned, notes: notes ?? null, completedAt: new Date().toISOString() }
+          : f
+      ),
+    });
+  },
+  setTheme: (theme) => set({ theme }),
+  setAccentColor: (accentColor) => set({ accentColor }),
+  setCompactMode: (compactMode) => set({ compactMode }),
+  setNotificationPrefs: (p) => set((s) => ({ notificationPrefs: { ...s.notificationPrefs, ...p } })),
+  completeOnboardingStep: (step) => set({ onboardingStep: step }),
+  finishOnboarding: () => set({ onboardingComplete: true, onboardingStep: 4 }),
   setUser: (user) => set({ user }),
   setPillars: (pillars) => set({ pillars }),
   setQuests: (quests) => set({ quests }),
   setTodayCheckin: (checkin) => set({ todayCheckin: checkin }),
   setActivityLog: (log) => set({ activityLog: log }),
+  setWorkflowEnabled: (on) => set({ workflowEnabled: on }),
+  setWorkflowCategory: (app, category) => set((s) => ({
+    workflowCategoryOverrides: { ...s.workflowCategoryOverrides, [app.trim().toLowerCase()]: category },
+  })),
+  setWorkflowSummary: (date, text) => set({ workflowSummary: { date, text } }),
   setGoals: (goals) => set({ goals }),
   setIsAuthenticated: (val) => set({ isAuthenticated: val }),
   setIsLoading: (val) => set({ isLoading: val }),
@@ -334,6 +490,14 @@ export const useStore = create<AppState>()(persist((set, get) => ({
       xp_earned: xpEarned,
       pillar: quest.pillar,
       created_at: now,
+    });
+    get().addActivity({
+      type: 'task_complete',
+      title: `Completed: ${quest.title}`,
+      description: quest.description || null,
+      xp: xpEarned,
+      pillar: quest.pillar,
+      metadata: { questId: quest.id },
     });
 
     const newNotifications: Omit<Notification, 'id' | 'timestamp'>[] = [];
@@ -496,6 +660,7 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   submitCheckin: (sleep, energy, mood, notes) => {
     const { user, activityLog } = get();
     const now = new Date();
+    const flags = parseCheckinFlags(notes);
     const checkin: DailyCheckin = {
       id: crypto.randomUUID(),
       user_id: user?.id || '',
@@ -507,11 +672,17 @@ export const useStore = create<AppState>()(persist((set, get) => ({
       created_at: now.toISOString(),
     };
 
+    const flagTagParts: string[] = [];
+    if (flags.drank) flagTagParts.push('Drank: Yes');
+    if (flags.smoked) flagTagParts.push('Smoked: Yes');
+    if (flags.m) flagTagParts.push('M: Yes');
+    const flagTag = flagTagParts.length > 0 ? ` // ${flagTagParts.join(' // ')}` : '';
+
     const logEntry: ActivityLogEntry = {
       id: crypto.randomUUID(),
       user_id: user?.id || '',
       action: 'checkin',
-      description: `CHECK-IN — Sleep: ${sleep}/5 // Energy: ${energy}/5 // Mood: ${mood}/5`,
+      description: `CHECK-IN — Sleep: ${sleep}/5 // Energy: ${energy}/5 // Mood: ${mood}/5${flagTag}`,
       xp_earned: 0,
       pillar: null,
       created_at: now.toISOString(),
@@ -520,6 +691,19 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     set({
       todayCheckin: checkin,
       activityLog: [logEntry, ...activityLog].slice(0, 100),
+    });
+    const flagDescParts: string[] = [];
+    if (flags.drank) flagDescParts.push('🍷 Drank');
+    if (flags.smoked) flagDescParts.push('💨 Smoked');
+    if (flags.m) flagDescParts.push('🌙 M');
+    const flagDesc = flagDescParts.length > 0 ? ` · ${flagDescParts.join(' · ')}` : '';
+    get().addActivity({
+      type: 'checkin',
+      title: 'Daily Check-In',
+      description: `Sleep: ${sleep}/5 · Energy: ${energy}/5 · Mood: ${mood}/5${flagDesc}`,
+      xp: 0,
+      pillar: null,
+      metadata: { sleep, energy, mood, drank: flags.drank, smoked: flags.smoked, m: flags.m },
     });
     saveCheckin(checkin).catch(() => {});
     saveActivityLogEntries([logEntry]).catch(() => {});
@@ -624,5 +808,22 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     icalEvents: state.icalEvents,
     icalSourceName: state.icalSourceName,
     journalEntries: state.journalEntries,
+    ideas: state.ideas,
+    recurringTasks: state.recurringTasks,
+    activityFeed: state.activityFeed,
+    focusSessions: state.focusSessions,
+    checkinHistory: state.checkinHistory,
+    theme: state.theme,
+    accentColor: state.accentColor,
+    compactMode: state.compactMode,
+    notificationPrefs: state.notificationPrefs,
+    customPillarNames: state.customPillarNames,
+    onboardingComplete: state.onboardingComplete,
+    onboardingStep: state.onboardingStep,
+    workflowEnabled: state.workflowEnabled,
+    workflowCategoryOverrides: state.workflowCategoryOverrides,
+    workflowSummary: state.workflowSummary,
   }),
+  version: 1,
+  migrate: (persistedState) => migrateStore((persistedState ?? {}) as Record<string, unknown>) as typeof persistedState,
 }));
