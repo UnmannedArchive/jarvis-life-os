@@ -42,3 +42,8 @@ next-env.d.ts
 
 # brainstorming (superpowers visual companion)
 .superpowers/
+
+# python (workflow collector)
+monitor/.venv/
+__pycache__/
+*.pyc
