@@ -2,16 +2,18 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, CheckSquare, BarChart3, Target, Settings, ChevronLeft, ChevronRight, Timer } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, BarChart3, Target, Settings, ChevronLeft, ChevronRight, Timer, Lightbulb, Activity } from 'lucide-react';
 import { useStore } from '@/stores/useStore';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const nav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/quests', label: 'Tasks', icon: CheckSquare },
+  { href: '/ideas', label: 'Ideas', icon: Lightbulb },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/goals', label: 'Goals', icon: Target },
   { href: '/focus', label: 'Focus', icon: Timer },
+  { href: '/workflow', label: 'Workflow', icon: Activity },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -19,13 +21,14 @@ export default function Sidebar() {
   const pathname = usePathname();
   const open = useStore((s) => s.sidebarOpen);
   const setOpen = useStore((s) => s.setSidebarOpen);
+  const workflowEnabled = useStore((s) => s.workflowEnabled);
 
   return (
     <motion.aside initial={false} animate={{ width: open ? 220 : 60 }} transition={{ duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
       className="hidden md:flex flex-col border-r border-border bg-[rgba(0,0,0,0.4)] flex-shrink-0 h-full">
       <div className="flex-1 py-3">
         <nav className="flex flex-col gap-0.5 px-2">
-          {nav.map((item) => {
+          {nav.filter((item) => item.href !== '/workflow' || workflowEnabled).map((item) => {
             const active = pathname === item.href;
             const Icon = item.icon;
             return (
@@ -53,8 +56,11 @@ export default function Sidebar() {
           })}
         </nav>
       </div>
-      <button onClick={() => setOpen(!open)}
-        className="flex items-center justify-center py-3 border-t border-border text-text-placeholder hover:text-text-secondary transition-colors cursor-pointer">
+      <button
+        onClick={() => setOpen(!open)}
+        aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'}
+        className="flex items-center justify-center py-3 border-t border-border text-text-placeholder hover:text-text-secondary transition-colors cursor-pointer"
+      >
         {open ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
       </button>
     </motion.aside>
