@@ -12,9 +12,6 @@ import {
   FocusSession,
   Goal,
   Pillar,
-  Difficulty,
-  QuestType,
-  DIFFICULTY_CONFIG,
 } from '@/lib/types';
 import { migrateStore } from '@/lib/migrations';
 import {
@@ -24,8 +21,6 @@ import {
   getCharacterClass,
   getStreakMilestoneReached,
   getStreakMilestoneXP,
-  isPerfectDay,
-  getPerfectDayBonus,
 } from '@/lib/xp';
 import { format } from 'date-fns';
 import { fireConfetti, firePerfectDay, fireLevelUp } from '@/lib/confetti';

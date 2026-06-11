@@ -1,4 +1,4 @@
-import { Quest, LifePillar, Goal } from './types';
+import { Quest, LifePillar } from './types';
 import { SubTask } from '@/stores/useStore';
 
 export interface Achievement {

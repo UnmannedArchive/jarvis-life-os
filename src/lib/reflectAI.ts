@@ -1,4 +1,4 @@
-import { Quest, Pillar, PILLAR_CONFIG } from './types';
+import { Pillar, PILLAR_CONFIG } from './types';
 
 export interface JournalEntry {
   id: string;
@@ -114,9 +114,8 @@ function getActionSuggestion(mood: string, themes: string[], pillar: Pillar | nu
   return 'Before bed, write down the one thing you want to accomplish tomorrow.';
 }
 
-export function analyzeReflection(text: string, quests: Quest[]): ReflectionAnalysis {
+export function analyzeReflection(text: string): ReflectionAnalysis {
   const lower = text.toLowerCase();
-  const words = lower.split(/\s+/);
 
   const posCount = POSITIVE_WORDS.filter((w) => lower.includes(w)).length;
   const toughCount = TOUGH_WORDS.filter((w) => lower.includes(w)).length;

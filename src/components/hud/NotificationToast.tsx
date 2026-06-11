@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useStore } from '@/stores/useStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trophy, Flame, Star, ArrowUpRight, Zap, Gift, CheckCircle2 } from 'lucide-react';
@@ -14,7 +15,18 @@ const ICONS: Record<string, React.ReactNode> = {
 export default function NotificationToast() {
   const notifications = useStore((s) => s.notifications);
   const dismiss = useStore((s) => s.dismissNotification);
-  const visible = notifications.filter((n) => Date.now() - n.timestamp < 6000).slice(0, 3);
+
+  // Tick while toasts exist so expired ones actually leave the screen —
+  // reading Date.now() during render froze the 6s window at whatever moment
+  // the last unrelated re-render happened to occur.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (notifications.length === 0) return;
+    const i = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(i);
+  }, [notifications.length]);
+
+  const visible = notifications.filter((n) => now - n.timestamp < 6000).slice(0, 3);
 
   return (
     <div className="fixed top-16 right-4 z-[90] flex flex-col gap-2 w-80">

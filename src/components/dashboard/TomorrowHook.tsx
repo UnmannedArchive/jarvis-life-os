@@ -9,16 +9,12 @@ import { ArrowRight } from 'lucide-react';
 export default function TomorrowHook() {
   const user = useStore((s) => s.user);
   const pillars = useStore((s) => s.pillars);
-  const quests = useStore((s) => s.quests);
-
   const hook = useMemo(() => {
-    const completed = quests.filter((q) => q.completed).length;
     return getTomorrowHook(
       user?.current_streak || 0,
       pillars.map((p) => ({ pillar: p.pillar, level: p.level })),
-      completed,
     );
-  }, [user, pillars, quests]);
+  }, [user, pillars]);
 
   return (
     <HUDPanel delay={5} className="mt-4">
