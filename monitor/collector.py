@@ -121,8 +121,18 @@ def append_session(session: dict) -> None:
         f.write(json.dumps(session) + "\n")
 
 
+def ensure_events_file() -> None:
+    """Create the events file on startup so the Life OS UI immediately sees
+    the monitor as running, before the first session closes."""
+    d = monitor_dir()
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "events.jsonl"), "a", encoding="utf-8"):
+        pass
+
+
 def run() -> None:
     acc = SessionAccumulator()
+    ensure_events_file()
     print(f"Life OS collector running. Writing to {monitor_dir()}/events.jsonl")
     print(f"Polling every {POLL_SECONDS}s. Ctrl+C to stop.")
     try:

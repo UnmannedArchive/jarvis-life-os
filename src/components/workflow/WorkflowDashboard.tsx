@@ -28,7 +28,7 @@ export default function WorkflowDashboard() {
     return <div className="p-6 text-text-tertiary text-sm">Loading your workflow…</div>;
   }
 
-  if (!monitorRunning || view.totals.focus + view.totals.neutral + view.totals.distraction === 0) {
+  if (!monitorRunning) {
     return (
       <div className="p-6">
         <div className="rounded-2xl border border-border bg-[rgba(255,255,255,0.03)] p-6 max-w-xl">
@@ -41,6 +41,23 @@ export default function WorkflowDashboard() {
             First run: grant Screen Recording permission in System Settings → Privacy &amp; Security. Then click Refresh.
           </p>
           <button onClick={refresh} className="mt-4 inline-flex items-center gap-2 text-sm text-accent hover:underline cursor-pointer">
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (view.totals.focus + view.totals.neutral + view.totals.distraction === 0) {
+    return (
+      <div className="p-6">
+        <div className="rounded-2xl border border-border bg-[rgba(255,255,255,0.03)] p-6 max-w-xl">
+          <h2 className="text-base font-semibold text-text-primary mb-2">Monitor is running</h2>
+          <p className="text-sm text-text-tertiary mb-3">
+            Collecting your first session — keep working normally and check back in a minute.
+            Sessions are recorded when you switch apps or windows.
+          </p>
+          <button onClick={refresh} className="inline-flex items-center gap-2 text-sm text-accent hover:underline cursor-pointer">
             <RefreshCw size={14} /> Refresh
           </button>
         </div>
