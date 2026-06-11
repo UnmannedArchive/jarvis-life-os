@@ -100,6 +100,13 @@ interface AppState {
   gcalCalendarId: string | null;
   setGcalConfig: (apiKey: string | null, calendarId: string | null) => void;
 
+  // Google Calendar via secret iCal address (read-only). Events are cached so
+  // the calendar renders instantly and survives being offline.
+  gcalIcsUrl: string | null;
+  setGcalIcsUrl: (url: string | null) => void;
+  icsCache: { fetchedAt: string; events: import('@/lib/icalParser').ICalEvent[] } | null;
+  setIcsCache: (cache: { fetchedAt: string; events: import('@/lib/icalParser').ICalEvent[] } | null) => void;
+
   // iCal imports
   icalEvents: import('@/lib/icalParser').ICalEvent[];
   icalSourceName: string | null;
@@ -155,6 +162,8 @@ interface AppState {
   setUser: (user: User | null) => void;
   setPillars: (pillars: LifePillar[]) => void;
   setQuests: (quests: Quest[]) => void;
+  /** Reschedule a quest from the calendar (drag or quick edit). */
+  updateQuestDueDate: (questId: string, dueDate: string | null) => void;
   setTodayCheckin: (checkin: DailyCheckin | null) => void;
   setActivityLog: (log: ActivityLogEntry[]) => void;
   setGoals: (goals: Goal[]) => void;
@@ -244,6 +253,8 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   dashboardWidgets: [],
   gcalApiKey: null,
   gcalCalendarId: null,
+  gcalIcsUrl: null,
+  icsCache: null,
   icalEvents: [],
   icalSourceName: null,
   journalEntries: [],
@@ -266,6 +277,8 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   setBackgroundImage: (url) => set({ backgroundImage: url }),
   setDashboardWidgets: (widgets) => set({ dashboardWidgets: widgets }),
   setGcalConfig: (apiKey, calendarId) => set({ gcalApiKey: apiKey, gcalCalendarId: calendarId }),
+  setGcalIcsUrl: (url) => set({ gcalIcsUrl: url, ...(url ? {} : { icsCache: null }) }),
+  setIcsCache: (cache) => set({ icsCache: cache }),
   setIcalEvents: (events, sourceName) => set({ icalEvents: events, icalSourceName: sourceName ?? null }),
   clearIcalEvents: () => set({ icalEvents: [], icalSourceName: null }),
   addJournalEntry: (entry) => set((s) => ({ journalEntries: [entry, ...s.journalEntries].slice(0, 50) })),
@@ -657,6 +670,15 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     deleteQuestRemote(questId).catch(() => {});
   },
 
+  updateQuestDueDate: (questId, dueDate) => {
+    const updated = get().quests.map((q) =>
+      q.id === questId ? { ...q, due_date: dueDate } : q
+    );
+    set({ quests: updated });
+    const quest = updated.find((q) => q.id === questId);
+    if (quest) upsertQuest(quest).catch(() => {});
+  },
+
   submitCheckin: (sleep, energy, mood, notes) => {
     const { user, activityLog } = get();
     const now = new Date();
@@ -805,6 +827,8 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     dashboardWidgets: state.dashboardWidgets,
     gcalApiKey: state.gcalApiKey,
     gcalCalendarId: state.gcalCalendarId,
+    gcalIcsUrl: state.gcalIcsUrl,
+    icsCache: state.icsCache,
     icalEvents: state.icalEvents,
     icalSourceName: state.icalSourceName,
     journalEntries: state.journalEntries,

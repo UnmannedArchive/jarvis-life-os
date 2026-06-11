@@ -48,6 +48,9 @@ export default function SettingsPage() {
   const gcalApiKey = useStore((s) => s.gcalApiKey);
   const gcalCalendarId = useStore((s) => s.gcalCalendarId);
   const setGcalConfig = useStore((s) => s.setGcalConfig);
+  const gcalIcsUrl = useStore((s) => s.gcalIcsUrl);
+  const setGcalIcsUrl = useStore((s) => s.setGcalIcsUrl);
+  const setIcsCache = useStore((s) => s.setIcsCache);
   const workflowEnabled = useStore((s) => s.workflowEnabled);
   const setWorkflowEnabled = useStore((s) => s.setWorkflowEnabled);
   const [name, setName] = useState(user?.display_name || '');
@@ -60,6 +63,11 @@ export default function SettingsPage() {
   const [gcalSaved, setGcalSaved] = useState(false);
   const [gcalTesting, setGcalTesting] = useState(false);
   const [gcalTestResult, setGcalTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [icsUrlInput, setIcsUrlInput] = useState(gcalIcsUrl || '');
+  const [icsSaved, setIcsSaved] = useState(false);
+  const [icsTesting, setIcsTesting] = useState(false);
+  const [icsTestResult, setIcsTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [showGcalAdvanced, setShowGcalAdvanced] = useState(false);
   const icalEvents = useStore((s) => s.icalEvents);
   const icalSourceName = useStore((s) => s.icalSourceName);
   const setIcalEvents = useStore((s) => s.setIcalEvents);
@@ -267,10 +275,108 @@ export default function SettingsPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Google Calendar</h2>
         </div>
         <p className="text-xs text-text-tertiary mb-4">
-          Connect your Google Calendar to see upcoming events on your dashboard.
+          Link your Google Calendar (read-only) to see your events on the Calendar page and dashboard.
         </p>
 
         <div className="rounded-xl border border-border bg-[rgba(0,0,0,0.4)] p-4 mb-4">
+          <div className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-3">How to get your secret address</div>
+          <ol className="text-xs text-text-tertiary space-y-2">
+            <li className="flex gap-2">
+              <span className="text-accent font-bold">1.</span>
+              <span>Open <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline inline-flex items-center gap-0.5">Google Calendar settings <ExternalLink size={9} /></a> and pick your calendar under &ldquo;Settings for my calendars&rdquo;</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-accent font-bold">2.</span>
+              <span>Scroll to <strong className="text-text-secondary">Integrate calendar</strong></span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-accent font-bold">3.</span>
+              <span>Copy the <strong className="text-text-secondary">Secret address in iCal format</strong> (ends in .ics) and paste it below — no API keys, your calendar stays private</span>
+            </li>
+          </ol>
+        </div>
+
+        <div className="mb-4">
+          <label className="text-xs font-medium text-text-secondary block mb-1.5">Secret iCal address</label>
+          <input
+            type="password"
+            value={icsUrlInput}
+            onChange={(e) => { setIcsUrlInput(e.target.value); setIcsTestResult(null); }}
+            placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+            className="w-full border border-border rounded-xl px-3 py-2 text-sm font-mono"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap mb-1">
+          <HUDButton size="sm" onClick={() => {
+            const trimmed = icsUrlInput.trim();
+            setGcalIcsUrl(trimmed || null);
+            setIcsSaved(true);
+            setTimeout(() => setIcsSaved(false), 2000);
+          }}>
+            Save
+          </HUDButton>
+          <HUDButton size="sm" variant="secondary" onClick={async () => {
+            const url = icsUrlInput.trim();
+            if (!url) {
+              setIcsTestResult({ ok: false, msg: 'Paste your secret iCal address first' });
+              return;
+            }
+            setIcsTesting(true);
+            setIcsTestResult(null);
+            try {
+              const res = await fetch('/api/calendar/ics', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url }),
+              });
+              const data = await res.json();
+              if (!res.ok) {
+                setIcsTestResult({ ok: false, msg: data.error || `Error ${res.status}` });
+              } else {
+                const events = parseICalFile(data.ics);
+                setIcsTestResult({ ok: true, msg: `Connected! Found ${events.length} event(s) in the feed.` });
+              }
+            } catch {
+              setIcsTestResult({ ok: false, msg: 'Network error — check your connection' });
+            } finally {
+              setIcsTesting(false);
+            }
+          }}>
+            {icsTesting ? 'Testing...' : 'Test Connection'}
+          </HUDButton>
+          {gcalIcsUrl && (
+            <HUDButton size="sm" variant="danger" onClick={() => {
+              setGcalIcsUrl(null);
+              setIcsCache(null);
+              setIcsUrlInput('');
+              setIcsTestResult(null);
+            }}>
+              Disconnect
+            </HUDButton>
+          )}
+          {icsSaved && <span className="text-xs font-medium text-success">Saved!</span>}
+        </div>
+
+        {icsTestResult && (
+          <div className={`mt-3 p-2.5 rounded-lg border text-xs ${
+            icsTestResult.ok
+              ? 'border-success/20 bg-success-dim text-success'
+              : 'border-danger/20 bg-danger-dim text-danger'
+          }`}>
+            {icsTestResult.msg}
+          </div>
+        )}
+
+        <button
+          onClick={() => setShowGcalAdvanced(!showGcalAdvanced)}
+          className="mt-4 text-[11px] text-text-placeholder hover:text-text-secondary transition-colors"
+        >
+          {showGcalAdvanced ? '▾' : '▸'} Advanced: API key (public calendars only)
+        </button>
+
+        {showGcalAdvanced && (<>
+        <div className="rounded-xl border border-border bg-[rgba(0,0,0,0.4)] p-4 mb-4 mt-3">
           <div className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-3">Setup Steps</div>
           <ol className="text-xs text-text-tertiary space-y-2">
             <li className="flex gap-2">
@@ -377,6 +483,7 @@ export default function SettingsPage() {
             {gcalTestResult.msg}
           </div>
         )}
+        </>)}
       </HUDPanel>
 
       <HUDPanel delay={3}>

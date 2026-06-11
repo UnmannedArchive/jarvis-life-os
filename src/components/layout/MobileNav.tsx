@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, CheckSquare, Lightbulb, BarChart3, Timer, Settings, Activity } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, CalendarDays, Lightbulb, BarChart3, Timer, Settings, Activity } from 'lucide-react';
 import { useStore } from '@/stores/useStore';
 
 const items = [
   { href: '/', label: 'Home', icon: LayoutDashboard },
   { href: '/quests', label: 'Tasks', icon: CheckSquare },
+  { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/ideas', label: 'Ideas', icon: Lightbulb },
   { href: '/focus', label: 'Focus', icon: Timer },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },

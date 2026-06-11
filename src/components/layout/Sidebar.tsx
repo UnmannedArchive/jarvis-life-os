@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, CheckSquare, BarChart3, Target, Settings, ChevronLeft, ChevronRight, Timer, Lightbulb, Activity } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, CalendarDays, BarChart3, Target, Settings, ChevronLeft, ChevronRight, Timer, Lightbulb, Activity } from 'lucide-react';
 import { useStore } from '@/stores/useStore';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const nav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/quests', label: 'Tasks', icon: CheckSquare },
+  { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/ideas', label: 'Ideas', icon: Lightbulb },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/goals', label: 'Goals', icon: Target },

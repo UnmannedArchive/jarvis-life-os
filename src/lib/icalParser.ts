@@ -7,6 +7,8 @@ export interface ICalEvent {
   end: string;
   allDay: boolean;
   recurrence: string | null;
+  /** Cancelled single occurrences of a recurring event (EXDATE), as ISO strings. */
+  exdates: string[];
   status: string | null;
   organizer: string | null;
   created: string | null;
@@ -81,6 +83,21 @@ function getDateProperty(lines: string[], propName: string): { iso: string; allD
   return null;
 }
 
+/** EXDATE can repeat and each line can hold comma-separated dates. */
+function getExdates(lines: string[]): string[] {
+  const out: string[] = [];
+  for (const line of lines) {
+    const upper = line.toUpperCase();
+    if (!upper.startsWith('EXDATE:') && !upper.startsWith('EXDATE;')) continue;
+    const colonIdx = line.indexOf(':');
+    if (colonIdx === -1) continue;
+    for (const value of line.slice(colonIdx + 1).trim().split(',')) {
+      if (value) out.push(parseICalDate(value).iso);
+    }
+  }
+  return out;
+}
+
 function extractVEvents(lines: string[]): string[][] {
   const events: string[][] = [];
   let current: string[] | null = null;
@@ -132,6 +149,7 @@ export function parseICalFile(content: string): ICalEvent[] {
         end,
         allDay,
         recurrence: rrule,
+        exdates: getExdates(block),
         status,
         organizer,
         created,
