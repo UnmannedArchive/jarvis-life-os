@@ -102,6 +102,30 @@ interface AppState {
   icsCache: { fetchedAt: string; events: import('@/lib/icalParser').ICalEvent[] } | null;
   setIcsCache: (cache: { fetchedAt: string; events: import('@/lib/icalParser').ICalEvent[] } | null) => void;
 
+  // WHOOP — OAuth tokens (client-stored, like gcalIcsUrl) + a cache of the
+  // latest normalized biometric data so widgets render instantly / offline.
+  whoopAuth: { accessToken: string; refreshToken: string; expiresAt: number } | null;
+  setWhoopAuth: (auth: { accessToken: string; refreshToken: string; expiresAt: number } | null) => void;
+  clearWhoopAuth: () => void;
+  whoopCache: {
+    fetchedAt: string;
+    recovery: import('@/lib/whoop/types').WhoopRecovery[];
+    sleep: import('@/lib/whoop/types').WhoopSleep[];
+    cycles: import('@/lib/whoop/types').WhoopCycle[];
+    workouts: import('@/lib/whoop/types').WhoopWorkout[];
+  } | null;
+  setWhoopCache: (cache: AppState['whoopCache']) => void;
+  // Our WHOOP user id (from the profile), set after connect. Identifies which
+  // whoop_data row to read + subscribe to when cloud push is configured.
+  whoopUserId: number | null;
+  setWhoopUserId: (id: number | null) => void;
+
+  // Google Calendar WRITE access (OAuth, separate from the read-only iCal feed).
+  // Client-stored tokens like whoopAuth; only the client secret is server-side.
+  googleAuth: { accessToken: string; refreshToken: string; expiresAt: number } | null;
+  setGoogleAuth: (auth: { accessToken: string; refreshToken: string; expiresAt: number } | null) => void;
+  clearGoogleAuth: () => void;
+
   // iCal imports
   icalEvents: import('@/lib/icalParser').ICalEvent[];
   icalSourceName: string | null;
@@ -250,6 +274,10 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   gcalCalendarId: null,
   gcalIcsUrl: null,
   icsCache: null,
+  whoopAuth: null,
+  whoopCache: null,
+  whoopUserId: null,
+  googleAuth: null,
   icalEvents: [],
   icalSourceName: null,
   journalEntries: [],
@@ -274,6 +302,12 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   setGcalConfig: (apiKey, calendarId) => set({ gcalApiKey: apiKey, gcalCalendarId: calendarId }),
   setGcalIcsUrl: (url) => set({ gcalIcsUrl: url, ...(url ? {} : { icsCache: null }) }),
   setIcsCache: (cache) => set({ icsCache: cache }),
+  setWhoopAuth: (auth) => set({ whoopAuth: auth }),
+  clearWhoopAuth: () => set({ whoopAuth: null, whoopCache: null, whoopUserId: null }),
+  setWhoopCache: (cache) => set({ whoopCache: cache }),
+  setWhoopUserId: (id) => set({ whoopUserId: id }),
+  setGoogleAuth: (auth) => set({ googleAuth: auth }),
+  clearGoogleAuth: () => set({ googleAuth: null }),
   setIcalEvents: (events, sourceName) => set({ icalEvents: events, icalSourceName: sourceName ?? null }),
   clearIcalEvents: () => set({ icalEvents: [], icalSourceName: null }),
   addJournalEntry: (entry) => set((s) => ({ journalEntries: [entry, ...s.journalEntries].slice(0, 50) })),
@@ -824,6 +858,10 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     gcalCalendarId: state.gcalCalendarId,
     gcalIcsUrl: state.gcalIcsUrl,
     icsCache: state.icsCache,
+    whoopAuth: state.whoopAuth,
+    whoopCache: state.whoopCache,
+    whoopUserId: state.whoopUserId,
+    googleAuth: state.googleAuth,
     icalEvents: state.icalEvents,
     icalSourceName: state.icalSourceName,
     journalEntries: state.journalEntries,
