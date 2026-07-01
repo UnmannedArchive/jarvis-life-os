@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, isSupabaseConfigured } from './supabase';
 import type { User, LifePillar, Quest, DailyCheckin, ActivityLogEntry, Goal, Pillar } from './types';
 
 const ALL_PILLARS: Pillar[] = ['mind', 'body', 'work', 'wealth', 'spirit', 'social'];
@@ -50,13 +50,16 @@ export async function createNewUser(userId: string, email: string, displayName: 
 }
 
 // --- Individual save helpers (fire-and-forget) ---
+// No-ops while cloud sync is off, so the app stays fully local (no network calls).
 
 export async function saveUser(user: User) {
+  if (!isSupabaseConfigured()) return;
   const { id, ...rest } = user;
   await supabase.from('users').update(rest).eq('id', id);
 }
 
 export async function savePillars(pillars: LifePillar[]) {
+  if (!isSupabaseConfigured()) return;
   for (const p of pillars) {
     const { id, ...rest } = p;
     await supabase.from('life_pillars').update(rest).eq('id', id);
@@ -64,23 +67,26 @@ export async function savePillars(pillars: LifePillar[]) {
 }
 
 export async function upsertQuest(quest: Quest) {
+  if (!isSupabaseConfigured()) return;
   await supabase.from('quests').upsert(quest);
 }
 
 export async function deleteQuestRemote(questId: string) {
+  if (!isSupabaseConfigured()) return;
   await supabase.from('quests').delete().eq('id', questId);
 }
 
 export async function saveCheckin(checkin: DailyCheckin) {
+  if (!isSupabaseConfigured()) return;
   await supabase.from('daily_checkins').upsert(checkin, { onConflict: 'user_id,date' });
 }
 
 export async function saveActivityLogEntries(entries: ActivityLogEntry[]) {
-  if (entries.length === 0) return;
+  if (!isSupabaseConfigured() || entries.length === 0) return;
   await supabase.from('activity_log').upsert(entries);
 }
 
 export async function upsertGoals(goals: Goal[]) {
-  if (goals.length === 0) return;
+  if (!isSupabaseConfigured() || goals.length === 0) return;
   await supabase.from('goals').upsert(goals);
 }

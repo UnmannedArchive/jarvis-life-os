@@ -2,7 +2,7 @@
 
 import { useEffect, useState, ReactNode } from 'react';
 import { useStore } from '@/stores/useStore';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Navbar from '@/components/layout/Navbar';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileNav from '@/components/layout/MobileNav';
@@ -12,56 +12,151 @@ import NotificationToast from '@/components/hud/NotificationToast';
 import CriticalHitOverlay from '@/components/dashboard/CriticalHitOverlay';
 import KeyboardShortcuts from '@/components/providers/KeyboardShortcuts';
 import UndoToast from '@/components/hud/UndoToast';
-import { supabase } from '@/lib/supabase';
+import ActivityDrawer from '@/components/activity/ActivityDrawer';
+import LoginModal from '@/components/auth/LoginModal';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { loadUserData, createNewUser } from '@/lib/supabaseSync';
+import { PILLAR_CONFIG } from '@/lib/types';
+import type { User, Pillar, LifePillar } from '@/lib/types';
+
+const GUEST_USER: User = {
+  id: 'guest',
+  email: '',
+  display_name: 'Guest',
+  created_at: new Date().toISOString(),
+  total_xp: 0,
+  current_streak: 0,
+  longest_streak: 0,
+  character_class: 'RECRUIT',
+  avatar_url: null,
+};
+
+// The six life pillars start at level 1 with no XP. They must exist in the
+// store before any quest is completed — completeQuest maps over this array to
+// add pillar XP, so an empty array silently drops all per-pillar progress
+// (the Life Balance radar and pillar analytics stay blank forever).
+function seedPillars(userId: string): LifePillar[] {
+  return (Object.keys(PILLAR_CONFIG) as Pillar[]).map((pillar) => ({
+    id: `pillar-${pillar}`,
+    user_id: userId,
+    pillar,
+    current_xp: 0,
+    level: 1,
+    streak: 0,
+    last_activity_date: null,
+  }));
+}
+
+interface CloudData {
+  user: User;
+  pillars: import('@/lib/types').LifePillar[];
+  quests: import('@/lib/types').Quest[];
+  todayCheckin: import('@/lib/types').DailyCheckin | null;
+  activityLog: import('@/lib/types').ActivityLogEntry[];
+  goals: import('@/lib/types').Goal[];
+}
+
+function loadGuestMode(loadFromCloud: (data: CloudData) => void) {
+  const currentUser = useStore.getState().user;
+  if (!currentUser || currentUser.id === 'guest') {
+    loadFromCloud({
+      user: GUEST_USER,
+      pillars: [],
+      quests: [],
+      todayCheckin: null,
+      activityLog: [],
+      goals: [],
+    });
+  }
+}
+
+// Local-only mode: the persisted zustand store *is* the save file. Seed a fresh
+// profile on first run, but never overwrite an existing local save — unlike
+// loadGuestMode, which resets every slice to an empty guest on each load.
+function initLocalSave() {
+  const { user, pillars } = useStore.getState();
+  const resolvedUser = user ?? GUEST_USER;
+  useStore.setState({
+    user: resolvedUser,
+    pillars: pillars && pillars.length > 0 ? pillars : seedPillars(resolvedUser.id),
+    isAuthenticated: true,
+    isLoading: false,
+  });
+}
 
 export default function AppShell({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
   const router = useRouter();
-  const isAuthPage = pathname === '/login' || pathname === '/signup';
   const user = useStore((s) => s.user);
   const backgroundImage = useStore((s) => s.backgroundImage);
   const loadFromCloud = useStore((s) => s.loadFromCloud);
   const logout = useStore((s) => s.logout);
-  const [checking, setChecking] = useState(true);
+  const [ready, setReady] = useState(false);
+  const [loginDismissed, setLoginDismissed] = useState(false);
+
+  const showLogin =
+    ready &&
+    isSupabaseConfigured() &&
+    (!user || user.id === 'guest') &&
+    !loginDismissed;
 
   useEffect(() => {
     let mounted = true;
 
+    if (!isSupabaseConfigured()) {
+      initLocalSave();
+      setReady(true);
+      return;
+    }
+
+    const fallbackTimer = setTimeout(() => {
+      if (mounted && !useStore.getState().user) {
+        console.warn('[AppShell] Auth check timed out, loading guest mode');
+        loadGuestMode(loadFromCloud);
+        setReady(true);
+      }
+    }, 8000);
+
     async function initSession() {
-      const { data: { session } } = await supabase.auth.getSession();
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
 
-      if (!session) {
-        if (mounted) {
-          setChecking(false);
-          if (!isAuthPage) router.replace('/login');
+        if (!mounted) return;
+
+        if (!session) {
+          loadGuestMode(loadFromCloud);
+          setReady(true);
+          return;
         }
-        return;
+
+        const authUser = session.user;
+        let data = await loadUserData(authUser.id);
+
+        if (!data.user) {
+          const displayName =
+            (authUser.user_metadata?.display_name as string) ||
+            authUser.email?.split('@')[0] ||
+            'User';
+          data = await createNewUser(authUser.id, authUser.email!, displayName);
+        }
+
+        if (data.user && mounted) {
+          loadFromCloud({
+            user: data.user,
+            pillars: data.pillars,
+            quests: data.quests,
+            todayCheckin: data.todayCheckin,
+            activityLog: data.activityLog,
+            goals: data.goals,
+          });
+        }
+      } catch (err) {
+        console.warn('[AppShell] Auth error, falling back to guest mode:', err);
+        if (mounted) {
+          loadGuestMode(loadFromCloud);
+        }
+      } finally {
+        if (mounted) setReady(true);
       }
-
-      const authUser = session.user;
-      let data = await loadUserData(authUser.id);
-
-      if (!data.user) {
-        const displayName =
-          (authUser.user_metadata?.display_name as string) ||
-          authUser.email?.split('@')[0] ||
-          'User';
-        data = await createNewUser(authUser.id, authUser.email!, displayName);
-      }
-
-      if (data.user && mounted) {
-        loadFromCloud({
-          user: data.user,
-          pillars: data.pillars,
-          quests: data.quests,
-          todayCheckin: data.todayCheckin,
-          activityLog: data.activityLog,
-          goals: data.goals,
-        });
-      }
-
-      if (mounted) setChecking(false);
     }
 
     initSession();
@@ -70,30 +165,35 @@ export default function AppShell({ children }: { children: ReactNode }) {
       async (event, session) => {
         if (event === 'SIGNED_OUT') {
           logout();
-          router.replace('/login');
+          loadGuestMode(loadFromCloud);
+          router.replace('/');
         }
 
         if (event === 'SIGNED_IN' && session) {
-          const authUser = session.user;
-          let data = await loadUserData(authUser.id);
+          try {
+            const authUser = session.user;
+            let data = await loadUserData(authUser.id);
 
-          if (!data.user) {
-            const displayName =
-              (authUser.user_metadata?.display_name as string) ||
-              authUser.email?.split('@')[0] ||
-              'User';
-            data = await createNewUser(authUser.id, authUser.email!, displayName);
-          }
+            if (!data.user) {
+              const displayName =
+                (authUser.user_metadata?.display_name as string) ||
+                authUser.email?.split('@')[0] ||
+                'User';
+              data = await createNewUser(authUser.id, authUser.email!, displayName);
+            }
 
-          if (data.user) {
-            loadFromCloud({
-              user: data.user,
-              pillars: data.pillars,
-              quests: data.quests,
-              todayCheckin: data.todayCheckin,
-              activityLog: data.activityLog,
-              goals: data.goals,
-            });
+            if (data.user) {
+              loadFromCloud({
+                user: data.user,
+                pillars: data.pillars,
+                quests: data.quests,
+                todayCheckin: data.todayCheckin,
+                activityLog: data.activityLog,
+                goals: data.goals,
+              });
+            }
+          } catch (err) {
+            console.error('[AppShell] Failed to load user data after sign in:', err);
           }
         }
       }
@@ -101,16 +201,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
     return () => {
       mounted = false;
+      clearTimeout(fallbackTimer);
       subscription.unsubscribe();
     };
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (isAuthPage) return <>{children}</>;
-
-  if (checking) {
+  if (!ready && !user) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-bg ambient-bg">
-        <div className="w-10 h-10 border-2 border-border border-t-accent rounded-full animate-spin shadow-[0_0_20px_rgba(200,200,200,0.15)]" />
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-2 border-border border-t-accent rounded-full animate-spin shadow-[0_0_20px_rgba(200,200,200,0.15)]" />
+          <p className="text-xs text-text-placeholder">Connecting...</p>
+        </div>
       </div>
     );
   }
@@ -131,10 +233,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
             className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
             style={{
               backgroundImage: `url(${backgroundImage})`,
-              opacity: 0.4,
+              opacity: 0.2,
             }}
           />
-          <div className="absolute inset-0 z-0 bg-black/60" />
+          <div className="absolute inset-0 z-0 bg-black/75" />
         </>
       )}
       <LevelUpOverlay />
@@ -149,6 +251,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </div>
       <div className="hidden md:block relative z-10"><TerminalLog /></div>
       <MobileNav />
+      <ActivityDrawer />
+      <LoginModal open={showLogin} onDismiss={() => setLoginDismissed(true)} />
     </div>
   );
 }
