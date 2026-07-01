@@ -1,4 +1,4 @@
-import { dispatchRouteDecision } from '../inputRouter';
+import { dispatchRouteDecision, fallbackRouteDecision } from '../inputRouter';
 import type { RouteDecision } from '../inputRouter';
 import type { useStore } from '@/stores/useStore';
 import { DIFFICULTY_CONFIG } from '../types';
@@ -156,5 +156,28 @@ describe('dispatchRouteDecision', () => {
     expect(activityArg.pillar).toBe('body');
     expect(activityArg.xp).toBe(40);
     expect(result.destination).toContain('Body');
+  });
+});
+
+describe('fallbackRouteDecision', () => {
+  it('degrades to an idea carrying the raw text when the classifier is unreachable', () => {
+    const result = fallbackRouteDecision('what if habits synced over iMessage');
+
+    expect(result.decision).toEqual({
+      type: 'idea',
+      raw: 'what if habits synced over iMessage',
+    });
+    expect(result.confidence).toBe(0);
+    expect(result.rationale).toMatch(/offline|locally/i);
+  });
+
+  it('produces a decision dispatchRouteDecision can route without the API', () => {
+    const store = makeStore();
+    const { decision } = fallbackRouteDecision('rough note to self');
+
+    const result = dispatchRouteDecision(decision, store);
+
+    expect(store.addIdea).toHaveBeenCalledTimes(1);
+    expect(result.destination).toContain('Idea');
   });
 });

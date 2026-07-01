@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Loader2, Check, AlertCircle, Undo2 } from 'lucide-react';
 import { useStore } from '@/stores/useStore';
-import { routeInput, dispatchRouteDecision } from '@/lib/inputRouter';
+import { routeInput, dispatchRouteDecision, fallbackRouteDecision } from '@/lib/inputRouter';
 import type { ClassifyResponse } from '@/lib/inputRouter';
 
 type Status =
@@ -47,7 +47,11 @@ export default function SmartInbox() {
 
     setStatus({ kind: 'pending' });
     try {
-      const result: ClassifyResponse = await routeInput(value);
+      // Degrade like TodayPlanner does: if the classifier API is unreachable,
+      // file the capture locally as an idea instead of losing it to an error.
+      const result: ClassifyResponse = await routeInput(value).catch(() =>
+        fallbackRouteDecision(value),
+      );
       const { destination, undo } = dispatchRouteDecision(
         result.decision,
         useStore.getState(),

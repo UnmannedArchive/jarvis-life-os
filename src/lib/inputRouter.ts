@@ -63,6 +63,17 @@ export async function routeInput(text: string): Promise<ClassifyResponse> {
   return (await res.json()) as ClassifyResponse;
 }
 
+// Local no-LLM degrade path, mirroring the classifier's own low-confidence
+// behavior (<0.5 → idea). Used by SmartInbox when /api/classify-input fails,
+// the same way TodayPlanner falls back to orderTasksHeuristic.
+export function fallbackRouteDecision(text: string): ClassifyResponse {
+  return {
+    decision: { type: 'idea', raw: text },
+    confidence: 0,
+    rationale: 'AI offline — saved locally as an idea',
+  };
+}
+
 export function dispatchRouteDecision(decision: RouteDecision, store: Store): DispatchResult {
   switch (decision.type) {
     case 'quest': {
