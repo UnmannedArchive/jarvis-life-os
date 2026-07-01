@@ -8,8 +8,10 @@ import HUDPanel from '@/components/hud/HUDPanel';
 import HUDButton from '@/components/hud/HUDButton';
 import DifficultyBadge from '@/components/hud/DifficultyBadge';
 import { getLevelFromXP } from '@/lib/xp';
-import { Download, RotateCcw, Check, Image, X, Upload, Link as LinkIcon, Calendar, ExternalLink, FileText, Trash2, AlertCircle, Activity } from 'lucide-react';
+import { Download, RotateCcw, Check, Image as ImageIcon, X, Upload, Link as LinkIcon, Calendar, ExternalLink, FileText, Trash2, AlertCircle, Activity } from 'lucide-react';
 import { parseICalFile, getCalendarName } from '@/lib/icalParser';
+import { useWhoopData } from '@/hooks/useWhoopData';
+import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import RecurringTasksManager from '@/components/dashboard/RecurringTasksManager';
 import { saveUser } from '@/lib/supabaseSync';
 
@@ -53,6 +55,8 @@ export default function SettingsPage() {
   const setIcsCache = useStore((s) => s.setIcsCache);
   const workflowEnabled = useStore((s) => s.workflowEnabled);
   const setWorkflowEnabled = useStore((s) => s.setWorkflowEnabled);
+  const whoop = useWhoopData();
+  const gcalWrite = useGoogleCalendar();
   const [name, setName] = useState(user?.display_name || '');
   const [saved, setSaved] = useState(false);
   const [added, setAdded] = useState<Set<string>>(new Set());
@@ -77,6 +81,14 @@ export default function SettingsPage() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const icalFileRef = useRef<HTMLInputElement>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const loadFromCloud = useStore((s) => s.loadFromCloud);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const [pendingImport, setPendingImport] = useState<
+    | { data: Parameters<typeof loadFromCloud>[0]; summary: string }
+    | null
+  >(null);
 
   const level = user ? getLevelFromXP(user.total_xp) : 1;
   const existingTitles = new Set(quests.map((q) => q.title));
@@ -99,12 +111,65 @@ export default function SettingsPage() {
   };
 
   const handleExport = () => {
-    const data = { user, quests, pillars: useStore.getState().pillars, goals: useStore.getState().goals };
+    const s = useStore.getState();
+    const data = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      user: s.user,
+      pillars: s.pillars,
+      quests: s.quests,
+      goals: s.goals,
+      todayCheckin: s.todayCheckin,
+      activityLog: s.activityLog,
+    };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `lifeos-export-${new Date().toISOString().split('T')[0]}.json`;
     a.click(); URL.revokeObjectURL(url);
+  };
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportError(null);
+    setImportSuccess(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string);
+        if (!parsed || typeof parsed !== 'object' || !parsed.user || !Array.isArray(parsed.quests)) {
+          setImportError("This doesn't look like a Life OS export (missing user or tasks).");
+          return;
+        }
+        const data = {
+          user: parsed.user,
+          pillars: Array.isArray(parsed.pillars) ? parsed.pillars : [],
+          quests: Array.isArray(parsed.quests) ? parsed.quests : [],
+          goals: Array.isArray(parsed.goals) ? parsed.goals : [],
+          todayCheckin: parsed.todayCheckin ?? null,
+          activityLog: Array.isArray(parsed.activityLog) ? parsed.activityLog : [],
+        };
+        setPendingImport({
+          data,
+          summary: `${data.quests.length} task${data.quests.length === 1 ? '' : 's'} and ${data.goals.length} goal${data.goals.length === 1 ? '' : 's'}`,
+        });
+      } catch {
+        setImportError("Couldn't read this file. Make sure it's a Life OS export (.json).");
+      }
+    };
+    reader.onerror = () => setImportError('Failed to read the file.');
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const confirmImport = () => {
+    if (!pendingImport) return;
+    loadFromCloud(pendingImport.data);
+    setName(pendingImport.data.user?.display_name || '');
+    setImportSuccess(`Restored ${pendingImport.summary}.`);
+    setPendingImport(null);
+    setTimeout(() => setImportSuccess(null), 4000);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -131,8 +196,8 @@ export default function SettingsPage() {
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-4 settings-sections">
       {user?.id === 'guest' && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 mb-2">
-          <p className="text-sm font-medium text-amber-200">Using the app without an account.</p>
-          <p className="text-xs text-text-tertiary mt-1">Your progress is saved only on this device. Sign in or create an account to sync across devices.</p>
+          <p className="text-sm font-medium text-amber-200">Running in local mode.</p>
+          <p className="text-xs text-text-tertiary mt-1">Your progress is saved in this browser only. Use <span className="font-medium text-text-secondary">Export</span> below to back it up — or move it to another device with <span className="font-medium text-text-secondary">Import</span>.</p>
         </div>
       )}
       <HUDPanel delay={0}>
@@ -181,7 +246,7 @@ export default function SettingsPage() {
 
       <HUDPanel delay={1}>
         <div className="flex items-center gap-2 mb-1">
-          <Image size={13} className="text-accent" />
+          <ImageIcon size={13} className="text-accent" />
           <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Background</h2>
         </div>
         <p className="text-xs text-text-tertiary mb-4">Choose a background image for your workspace.</p>
@@ -486,6 +551,104 @@ export default function SettingsPage() {
         </>)}
       </HUDPanel>
 
+      <HUDPanel delay={2}>
+        <div className="flex items-center gap-2 mb-1">
+          <Activity size={13} className="text-accent" />
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">WHOOP</h2>
+        </div>
+        <p className="text-xs text-text-tertiary mb-4">
+          Connect WHOOP to pull recovery, sleep & strain into your dashboard, daily check-in,
+          and (soon) your calendar optimization.
+        </p>
+
+        {!whoop.configured ? (
+          <div className="rounded-xl border border-warning/20 bg-warning-dim p-4 text-xs text-warning">
+            WHOOP isn&rsquo;t configured yet. Register an app at{' '}
+            <a href="https://developer.whoop.com" target="_blank" rel="noopener noreferrer" className="underline inline-flex items-center gap-0.5">
+              developer.whoop.com <ExternalLink size={9} />
+            </a>{' '}
+            and add <code className="font-mono">NEXT_PUBLIC_WHOOP_CLIENT_ID</code>,{' '}
+            <code className="font-mono">WHOOP_CLIENT_SECRET</code> and{' '}
+            <code className="font-mono">NEXT_PUBLIC_WHOOP_REDIRECT_URI</code> to{' '}
+            <code className="font-mono">.env.local</code>.
+          </div>
+        ) : whoop.connected ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-xs text-success">
+              <Check size={14} /> Connected
+              {whoop.lastSynced && (
+                <span className="text-text-placeholder">
+                  · last synced {new Date(whoop.lastSynced).toLocaleString()}
+                </span>
+              )}
+            </div>
+            {whoop.today.recovery && (
+              <div className="text-xs text-text-tertiary">
+                Today: recovery <strong className="text-text-secondary">{whoop.today.recovery.recoveryScore}%</strong>
+                {whoop.today.cycle && <> · strain <strong className="text-text-secondary">{whoop.today.cycle.strain.toFixed(1)}</strong></>}
+                {whoop.today.sleep && <> · sleep <strong className="text-text-secondary">{whoop.today.sleep.performancePct}%</strong></>}
+              </div>
+            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              <HUDButton size="sm" variant="secondary" onClick={whoop.refresh}>
+                {whoop.loading ? 'Syncing…' : 'Sync now'}
+              </HUDButton>
+              <HUDButton size="sm" variant="danger" onClick={whoop.disconnect}>
+                Disconnect
+              </HUDButton>
+            </div>
+          </div>
+        ) : (
+          <HUDButton size="sm" onClick={whoop.connect}>
+            Connect WHOOP
+          </HUDButton>
+        )}
+
+        {whoop.error && (
+          <div className="mt-3 p-2.5 rounded-lg border border-danger/20 bg-danger-dim text-xs text-danger">
+            {whoop.error}
+          </div>
+        )}
+      </HUDPanel>
+
+      <HUDPanel delay={2}>
+        <div className="flex items-center gap-2 mb-1">
+          <Calendar size={13} className="text-accent" />
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Google Calendar — write access</h2>
+        </div>
+        <p className="text-xs text-text-tertiary mb-4">
+          Optional. Lets the WHOOP Coach add recovery-aware blocks (deep-work / rest) straight onto your
+          calendar. Separate from the read-only iCal link above.
+        </p>
+
+        {!gcalWrite.configured ? (
+          <div className="rounded-xl border border-warning/20 bg-warning-dim p-4 text-xs text-warning">
+            Not configured. Create an OAuth client in{' '}
+            <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="underline inline-flex items-center gap-0.5">
+              Google Cloud Console <ExternalLink size={9} />
+            </a>{' '}
+            (scope <code className="font-mono">calendar.events</code>) and add{' '}
+            <code className="font-mono">NEXT_PUBLIC_GOOGLE_CLIENT_ID</code>,{' '}
+            <code className="font-mono">GOOGLE_CLIENT_SECRET</code> and{' '}
+            <code className="font-mono">NEXT_PUBLIC_GOOGLE_REDIRECT_URI</code> to{' '}
+            <code className="font-mono">.env.local</code>.
+          </div>
+        ) : gcalWrite.connected ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="flex items-center gap-1.5 text-xs text-success"><Check size={14} /> Connected</span>
+            <HUDButton size="sm" variant="danger" onClick={gcalWrite.disconnect}>Disconnect</HUDButton>
+          </div>
+        ) : (
+          <HUDButton size="sm" onClick={gcalWrite.connect}>Connect Google Calendar</HUDButton>
+        )}
+
+        {gcalWrite.error && (
+          <div className="mt-3 p-2.5 rounded-lg border border-danger/20 bg-danger-dim text-xs text-danger">
+            {gcalWrite.error}
+          </div>
+        )}
+      </HUDPanel>
+
       <HUDPanel delay={3}>
         <div className="flex items-center gap-2 mb-1">
           <FileText size={13} className="text-accent" />
@@ -643,21 +806,70 @@ export default function SettingsPage() {
       </HUDPanel>
 
       <HUDPanel delay={6}>
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary mb-3">Data</h2>
-        <div className="flex gap-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary mb-1">Data</h2>
+        <p className="text-xs text-text-tertiary mb-4">Back up your save to a file, or restore it on this or another device. Import replaces everything currently on this device.</p>
+        <input
+          ref={importFileRef}
+          type="file"
+          accept="application/json,.json"
+          onChange={handleImportFile}
+          className="hidden"
+        />
+        <div className="flex gap-2 flex-wrap">
           <HUDButton variant="secondary" size="sm" onClick={handleExport}>
             <Download size={14} /> Export
+          </HUDButton>
+          <HUDButton variant="secondary" size="sm" onClick={() => importFileRef.current?.click()}>
+            <Upload size={14} /> Import
           </HUDButton>
           <HUDButton variant="danger" size="sm" onClick={() => setShowResetConfirm(true)}>
             <RotateCcw size={14} /> Reset
           </HUDButton>
         </div>
+        {importError && (
+          <div className="mt-3 flex items-center gap-2 p-2.5 rounded-lg border border-danger/20 bg-danger-dim text-xs text-danger">
+            <AlertCircle size={13} className="flex-shrink-0" />
+            {importError}
+            <button onClick={() => setImportError(null)} className="ml-auto text-danger/50 hover:text-danger cursor-pointer"><X size={10} /></button>
+          </div>
+        )}
+        {importSuccess && (
+          <div className="mt-3 p-2.5 rounded-lg border border-success/20 bg-success-dim text-xs text-success flex items-center gap-2">
+            <Check size={13} className="flex-shrink-0" />
+            {importSuccess}
+          </div>
+        )}
       </HUDPanel>
 
       <HUDPanel delay={7}>
         <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary mb-3">Account</h2>
         <p className="text-xs text-text-tertiary">Local mode — progress is saved in this browser.</p>
       </HUDPanel>
+
+      {pendingImport && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="import-dialog-title"
+        >
+          <div className="bg-bg-card border border-border rounded-xl shadow-2xl max-w-sm w-full p-5">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-accent-dim flex items-center justify-center flex-shrink-0">
+                <Upload size={18} className="text-accent" />
+              </div>
+              <div>
+                <h2 id="import-dialog-title" className="text-sm font-semibold text-text-primary">Restore from this backup?</h2>
+                <p className="text-xs text-text-secondary mt-1">This will replace everything on this device with the import ({pendingImport.summary}). Your current data will be overwritten and can&apos;t be recovered unless you exported it first.</p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <HUDButton variant="secondary" size="sm" onClick={() => setPendingImport(null)}>Cancel</HUDButton>
+              <HUDButton size="sm" onClick={confirmImport}>Replace &amp; restore</HUDButton>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showResetConfirm && (
         <div

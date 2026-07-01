@@ -6,7 +6,7 @@ import { computeFocusScore } from '@/lib/focusAI';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Crosshair, Check, Brain, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 
-function FocusRing({ percentage, size = 56, stroke = 4, mode }: { percentage: number; size?: number; stroke?: number; mode: 'work' | 'break' }) {
+function FocusRing({ percentage, size = 56, stroke = 4 }: { percentage: number; size?: number; stroke?: number; mode: 'work' | 'break' }) {
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (percentage / 100) * circumference;

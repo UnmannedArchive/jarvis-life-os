@@ -115,9 +115,9 @@ export default function TerminalLog() {
     >
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/8 to-transparent" />
 
-      {/* Header bar — always visible */}
+      {/* Header bar — always visible; pl-14 keeps content clear of bottom-left floating controls */}
       <div
-        className="flex items-center gap-2 px-4 py-1.5 cursor-pointer select-none"
+        className="flex items-center gap-2 pl-14 pr-4 py-1.5 cursor-pointer select-none"
         onClick={() => setExpanded(!expanded)}
       >
         <Activity size={11} className="text-text-placeholder" />
@@ -175,14 +175,14 @@ export default function TerminalLog() {
         </div>
       </div>
 
-      {/* Collapsed mini-view */}
+      {/* Collapsed mini-view — extra left padding so floating controls don't obscure message */}
       {!expanded && (
-        <div className="h-[44px] overflow-hidden px-4 pb-1.5">
+        <div className="h-[44px] overflow-hidden pl-14 pr-4 pb-1.5">
           <AnimatePresence mode="popLayout">
             {activityLog.length === 0 ? (
-              <div className="text-[11px] text-text-placeholder py-1 flex items-center gap-1.5">
-                <Clock size={10} />
-                No activity yet. Complete a task to get started.
+              <div className="text-[11px] text-text-placeholder py-1 flex items-center gap-1.5 min-w-0">
+                <Clock size={10} className="flex-shrink-0" />
+                <span>No activity yet. Complete a task to get started.</span>
               </div>
             ) : (
               activityLog.slice(0, 3).map((entry) => (

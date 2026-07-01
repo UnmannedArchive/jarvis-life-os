@@ -127,7 +127,6 @@ function PastEntry({ entry, onDelete }: { entry: JournalEntry; onDelete: () => v
 }
 
 export default function VentJournal() {
-  const quests = useStore((s) => s.quests);
   const journalEntries = useStore((s) => s.journalEntries);
   const addJournalEntry = useStore((s) => s.addJournalEntry);
   const deleteJournalEntry = useStore((s) => s.deleteJournalEntry);
@@ -147,7 +146,7 @@ export default function VentJournal() {
   const handleSubmit = () => {
     if (text.trim().length < 5) return;
 
-    const analysis = analyzeReflection(text.trim(), quests);
+    const analysis = analyzeReflection(text.trim());
     setCurrentAnalysis(analysis);
 
     const entry: JournalEntry = {

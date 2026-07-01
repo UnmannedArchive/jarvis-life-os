@@ -8,6 +8,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/stores/useStore';
 import { useCalendarData } from '@/hooks/useCalendarData';
+import { useWhoopData } from '@/hooks/useWhoopData';
+import { buildDaySignals } from '@/lib/whoop/optimize';
+import { recoveryColor } from '@/lib/whoop/insights';
 import { CalendarItem, dateKey } from '@/lib/calendarEvents';
 import { estimateXP } from '@/lib/xpAI';
 import { PILLAR_CONFIG } from '@/lib/types';
@@ -98,10 +101,26 @@ function ItemChip({ item, compact, onOpen }: {
 
 const MAX_CHIPS_MONTH = 4;
 
-function DayCell({ day, monthAnchor, items, onOpenDay, onOpenItem }: {
+/** Small WHOOP recovery indicator shown in a calendar day's header. */
+function RecoveryDot({ score }: { score: number }) {
+  const c = recoveryColor(score);
+  return (
+    <span
+      className="inline-flex items-center gap-0.5 text-[9px] font-semibold tabular-nums"
+      style={{ color: c }}
+      title={`WHOOP recovery ${score}%`}
+    >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: c }} />
+      {score}
+    </span>
+  );
+}
+
+function DayCell({ day, monthAnchor, items, recovery, onOpenDay, onOpenItem }: {
   day: Date;
   monthAnchor: Date;
   items: CalendarItem[];
+  recovery?: number;
   onOpenDay: (key: string) => void;
   onOpenItem: (item: CalendarItem) => void;
 }) {
@@ -122,9 +141,12 @@ function DayCell({ day, monthAnchor, items, onOpenDay, onOpenItem }: {
             : 'border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.01)] hover:bg-[rgba(255,255,255,0.03)]'
       } ${inMonth ? '' : 'opacity-35'}`}
     >
-      <span className={`text-[13px] font-medium px-1 ${today ? 'text-accent' : 'text-text-tertiary'}`}>
-        {format(day, 'd')}
-      </span>
+      <div className="flex items-center justify-between px-1">
+        <span className={`text-[13px] font-medium ${today ? 'text-accent' : 'text-text-tertiary'}`}>
+          {format(day, 'd')}
+        </span>
+        {recovery !== undefined && <RecoveryDot score={recovery} />}
+      </div>
       {items.slice(0, MAX_CHIPS_MONTH).map((item) => (
         <ItemChip key={item.id} item={item} compact onOpen={onOpenItem} />
       ))}
@@ -135,9 +157,10 @@ function DayCell({ day, monthAnchor, items, onOpenDay, onOpenItem }: {
   );
 }
 
-function WeekColumn({ day, items, onOpenDay, onOpenItem }: {
+function WeekColumn({ day, items, recovery, onOpenDay, onOpenItem }: {
   day: Date;
   items: CalendarItem[];
+  recovery?: number;
   onOpenDay: (key: string) => void;
   onOpenItem: (item: CalendarItem) => void;
 }) {
@@ -152,8 +175,9 @@ function WeekColumn({ day, items, onOpenDay, onOpenItem }: {
         isOver ? 'border-accent/40 bg-accent-dim' : today ? 'border-accent/25 bg-[rgba(255,255,255,0.03)]' : 'border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.01)]'
       }`}
     >
-      <div className={`text-[11px] font-semibold uppercase tracking-wider pb-1 border-b border-border/40 ${today ? 'text-accent' : 'text-text-tertiary'}`}>
-        {format(day, 'EEE d')}
+      <div className={`flex items-center justify-between pb-1 border-b border-border/40 ${today ? 'text-accent' : 'text-text-tertiary'}`}>
+        <span className="text-[11px] font-semibold uppercase tracking-wider">{format(day, 'EEE d')}</span>
+        {recovery !== undefined && <RecoveryDot score={recovery} />}
       </div>
       {items.length === 0 && <span className="text-[10px] text-text-placeholder">—</span>}
       {items.map((item) => (
@@ -324,6 +348,18 @@ export default function CalendarPage() {
   const { buckets, loading, error, lastSynced, refresh, hasEventSource } =
     useCalendarData(range.start, range.end);
 
+  // WHOOP recovery overlay: tint each day with its recovery score.
+  const { week: whoopWeek } = useWhoopData();
+  const recoveryByDay = useMemo(() => {
+    const map: Record<string, number> = {};
+    if (whoopWeek) {
+      for (const s of buildDaySignals(whoopWeek.recovery, [], {})) {
+        if (s.recovery !== null) map[s.date] = s.recovery;
+      }
+    }
+    return map;
+  }, [whoopWeek]);
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const allItems = useMemo(() => Object.values(buckets).flat(), [buckets]);
@@ -412,6 +448,7 @@ export default function CalendarPage() {
                     day={day}
                     monthAnchor={anchor}
                     items={buckets[dateKey(day)] ?? []}
+                    recovery={recoveryByDay[dateKey(day)]}
                     onOpenDay={setOpenDay}
                     onOpenItem={setOpenItem}
                   />
@@ -425,6 +462,7 @@ export default function CalendarPage() {
                   key={dateKey(day)}
                   day={day}
                   items={buckets[dateKey(day)] ?? []}
+                  recovery={recoveryByDay[dateKey(day)]}
                   onOpenDay={setOpenDay}
                   onOpenItem={setOpenItem}
                 />

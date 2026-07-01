@@ -1,10 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo } from 'react';
 import { useStore, XPHistoryEntry } from '@/stores/useStore';
 import HUDPanel from '@/components/hud/HUDPanel';
-import { format, subDays, startOfDay } from 'date-fns';
 import { Flame } from 'lucide-react';
+import { buildHeatmapGrid } from '@/lib/heatmapDates';
 
 export default function StreakCalendar() {
   const xpHistory = useStore((s) => s.xpHistory);
@@ -13,25 +14,21 @@ export default function StreakCalendar() {
   const { grid, maxXP } = useMemo(() => {
     const xpByDate: Record<string, number> = {};
     xpHistory.forEach((e: XPHistoryEntry) => {
-      xpByDate[e.date] = (xpByDate[e.date] || 0) + e.xp;
+      const key = e.date.trim();
+      if (!key) return;
+      xpByDate[key] = (xpByDate[key] || 0) + e.xp;
     });
-    const today = startOfDay(new Date());
-    const days = 91;
-    const cells = [];
-    let max = 0;
-    for (let i = days - 1; i >= 0; i--) {
-      const d = subDays(today, i);
-      const key = format(d, 'yyyy-MM-dd');
-      const xp = xpByDate[key] || 0;
-      if (xp > max) max = xp;
-      cells.push({ date: key, xp, dayOfWeek: d.getDay(), label: format(d, 'MMM d') });
-    }
+    const cells = buildHeatmapGrid().map((cell) => ({
+      ...cell,
+      xp: xpByDate[cell.date] as number | undefined,
+    }));
+    const max = cells.reduce((m, c) => (c.xp !== undefined && c.xp > m ? c.xp : m), 0);
     return { grid: cells, maxXP: max };
   }, [xpHistory]);
 
-  const getColor = (xp: number) => {
-    if (xp === 0) return 'rgba(255,255,255,0.02)';
-    if (maxXP === 0) return 'rgba(255,255,255,0.02)';
+  const getColor = (xp: number | undefined) => {
+    if (xp === undefined || xp === 0) return 'rgba(255,255,255,0.04)';
+    if (maxXP === 0) return 'rgba(255,255,255,0.04)';
     const ratio = xp / maxXP;
     if (ratio > 0.75) return 'rgba(200,200,200,0.7)';
     if (ratio > 0.5) return 'rgba(200,200,200,0.45)';
@@ -39,8 +36,8 @@ export default function StreakCalendar() {
     return 'rgba(200,200,200,0.12)';
   };
 
-  const getShadow = (xp: number) => {
-    if (xp === 0) return 'none';
+  const getShadow = (xp: number | undefined) => {
+    if (xp === undefined || xp === 0) return 'none';
     const ratio = maxXP > 0 ? xp / maxXP : 0;
     if (ratio > 0.5) return '0 0 6px rgba(200,200,200,0.2)';
     return 'none';
@@ -61,7 +58,7 @@ export default function StreakCalendar() {
   return (
     <HUDPanel delay={2}>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Activity</h2>
+        <Link href="/analytics" className="text-sm font-semibold text-text-secondary uppercase tracking-wider hover:text-text-primary transition-colors">Activity</Link>
         {user && user.current_streak > 0 && (
           <div className="flex items-center gap-1.5 text-xs">
             <Flame size={13} className="text-warning drop-shadow-[0_0_6px_rgba(251,191,36,0.3)]" />
@@ -75,9 +72,12 @@ export default function StreakCalendar() {
           <div key={wi} className="flex flex-col gap-[3px]">
             {week.map((cell, di) =>
               cell ? (
-                <div key={cell.date} title={`${cell.label}: ${cell.xp} XP`}
+                <div
+                  key={cell.date}
+                  title={cell.xp !== undefined ? `${cell.label}: ${cell.xp} XP` : `${cell.label}: No data`}
                   className="w-[11px] h-[11px] rounded-[3px] transition-all"
-                  style={{ backgroundColor: getColor(cell.xp), boxShadow: getShadow(cell.xp) }} />
+                  style={{ backgroundColor: getColor(cell.xp), boxShadow: getShadow(cell.xp) }}
+                />
               ) : (
                 <div key={`empty-${di}`} className="w-[11px] h-[11px]" />
               )
