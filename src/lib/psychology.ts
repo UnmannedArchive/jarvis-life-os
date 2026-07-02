@@ -37,7 +37,6 @@ export function getCritMultiplier(): number {
 export function getTomorrowHook(
   currentStreak: number,
   pillars: { pillar: Pillar; level: number }[],
-  tasksCompleted: number,
 ): { hook: string; subtext: string } {
   const day = new Date().getDay();
   const weakest = [...pillars].sort((a, b) => a.level - b.level)[0];

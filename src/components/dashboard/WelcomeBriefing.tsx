@@ -9,11 +9,12 @@ export default function WelcomeBriefing() {
   const user = useStore((s) => s.user);
   const pillars = useStore((s) => s.pillars);
   const todayCheckin = useStore((s) => s.todayCheckin);
+  const dailyIntention = useStore((s) => s.dailyIntention);
 
   if (!user) return null;
 
   const { greeting } = getGreeting(user.display_name);
-  const insight = getContextualInsight(pillars, user.current_streak, 0);
+  const insight = getContextualInsight(pillars, user.current_streak, 0, dailyIntention);
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}

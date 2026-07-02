@@ -77,6 +77,51 @@ export interface ActivityLogEntry {
   created_at: string;
 }
 
+/** New activity feed entry (for Activity Drawer). */
+export type ActivityFeedType =
+  | 'task_complete'
+  | 'task_create'
+  | 'checkin'
+  | 'streak'
+  | 'xp_gain'
+  | 'achievement'
+  | 'focus_complete'
+  | 'focus_start'
+  | 'journal'
+  | 'goal_create'
+  | 'goal_complete'
+  | 'goal_progress'
+  | 'login_bonus'
+  | 'level_up'
+  | 'idea_save'
+  | 'milestone';
+
+export interface ActivityFeedEntry {
+  id: string;
+  type: ActivityFeedType;
+  title: string;
+  description: string | null;
+  xp: number;
+  pillar: Pillar | null;
+  timestamp: string;
+  metadata: Record<string, unknown>;
+  pinned: boolean;
+  dismissed: boolean;
+}
+
+export interface FocusSession {
+  id: string;
+  questId: string | null;
+  pillarId: Pillar;
+  durationMinutes: number;
+  actualMinutes: number;
+  distractionCount: number;
+  xpEarned: number;
+  notes: string | null;
+  startedAt: string;
+  completedAt: string | null;
+}
+
 export interface Goal {
   id: string;
   user_id: string;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { format } from 'date-fns';
 import { useStore } from '@/stores/useStore';
 import { getDailyGrade, getDailyQuote } from '@/lib/psychology';
 import HUDPanel from '@/components/hud/HUDPanel';
@@ -22,7 +23,8 @@ export default function EndOfDayReview() {
     const sideDone = quests.filter((q) => q.quest_type === 'side' && q.completed).length;
     const totalDone = quests.filter((q) => q.completed).length;
 
-    const today = new Date().toISOString().split('T')[0];
+    // Local key to match how xpHistory entries are written.
+    const today = format(new Date(), 'yyyy-MM-dd');
     const todayXP = xpHistory.filter((e) => e.date === today).reduce((sum, e) => sum + e.xp, 0);
 
     const grade = getDailyGrade(dailyDone, daily.length, sideDone, !!todayCheckin);

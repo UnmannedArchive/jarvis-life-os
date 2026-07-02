@@ -2,20 +2,22 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef, memo } from 'react';
 import { useStore } from '@/stores/useStore';
-import { prioritizeQuests } from '@/lib/priority';
+import { prioritizeQuests, getQuestFocusRelevance } from '@/lib/priority';
 import { PILLAR_CONFIG, Pillar, Difficulty, Quest } from '@/lib/types';
 import { estimateXP } from '@/lib/xpAI';
 import HUDPanel from '@/components/hud/HUDPanel';
 import HUDButton from '@/components/hud/HUDButton';
 import DifficultyBadge from '@/components/hud/DifficultyBadge';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Plus, X, Sparkles, Brain } from 'lucide-react';
+import Link from 'next/link';
+import { Check, Plus, X, Sparkles, Brain, Target } from 'lucide-react';
 import { captureUndoState } from '@/components/hud/UndoToast';
 
-const QuestCard = memo(function QuestCard({ quest }: { quest: Quest }) {
+const QuestCard = memo(function QuestCard({ quest, focusRelevance }: { quest: Quest; focusRelevance?: number }) {
   const completeQuest = useStore((s) => s.completeQuest);
   const [xpPop, setXpPop] = useState(false);
   const cfg = PILLAR_CONFIG[quest.pillar];
+  const isFocusAligned = (focusRelevance ?? 0) >= 0.3;
 
   const handle = useCallback(() => {
     if (quest.completed) return;
@@ -27,22 +29,32 @@ const QuestCard = memo(function QuestCard({ quest }: { quest: Quest }) {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onClick={handle}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handle(); } }}
+      data-clickable
       className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all relative group ${
         quest.completed
           ? 'bg-[rgba(0,0,0,0.3)] border-[rgba(255,255,255,0.03)] opacity-40'
-          : 'bg-[rgba(255,255,255,0.02)] border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.03)]'
+          : isFocusAligned
+            ? 'bg-accent/[0.04] border-accent/20 hover:border-accent/40 hover:bg-accent/[0.06] shadow-[0_0_12px_rgba(200,200,200,0.04)]'
+            : 'bg-[rgba(255,255,255,0.02)] border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.03)]'
       }`}>
-      <button onClick={handle} disabled={quest.completed}
-        className={`w-[18px] h-[18px] rounded-md flex-shrink-0 border-[1.5px] flex items-center justify-center transition-all cursor-pointer ${
+      <div
+        className={`w-[18px] h-[18px] rounded-md flex-shrink-0 border-[1.5px] flex items-center justify-center transition-all pointer-events-none ${
           quest.completed
             ? 'border-success bg-success shadow-[0_0_8px_rgba(52,211,153,0.2)]'
-            : 'border-[rgba(255,255,255,0.12)] hover:border-accent hover:shadow-[0_0_8px_rgba(200,200,200,0.15)]'
+            : 'border-[rgba(255,255,255,0.12)] group-hover:border-accent group-hover:shadow-[0_0_8px_rgba(200,200,200,0.15)]'
         }`}>
         {quest.completed && <Check size={9} className="text-white" strokeWidth={3} />}
-      </button>
+      </div>
       <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 shadow-[0_0_6px_currentColor]" style={{ backgroundColor: cfg.color, color: cfg.color }} />
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 flex items-center gap-2">
         <div className={`text-sm ${quest.completed ? 'line-through text-text-placeholder' : 'text-text-primary'}`}>{quest.title}</div>
+        {isFocusAligned && !quest.completed && (
+          <Target size={11} className="text-accent flex-shrink-0 drop-shadow-[0_0_4px_rgba(200,200,200,0.4)]" aria-label="Aligned with today's focus" />
+        )}
       </div>
       <DifficultyBadge difficulty={quest.difficulty} />
       <span className="text-xs font-medium text-text-placeholder whitespace-nowrap tabular-nums">+{quest.xp_reward}</span>
@@ -62,6 +74,7 @@ export default function PriorityQueue() {
   const quests = useStore((s) => s.quests);
   const pillars = useStore((s) => s.pillars);
   const todayCheckin = useStore((s) => s.todayCheckin);
+  const dailyIntention = useStore((s) => s.dailyIntention);
   const addQuest = useStore((s) => s.addQuest);
   const [showAdd, setShowAdd] = useState(false);
   const [title, setTitle] = useState('');
@@ -76,21 +89,28 @@ export default function PriorityQueue() {
       debounceRef.current = setTimeout(() => {
         setAiEstimate(estimateXP(title.trim(), null, pillar, type));
       }, 250);
-    } else {
-      setAiEstimate(null);
     }
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [title, pillar, type]);
 
+  // Derived rather than cleared in the effect: a stale estimate is never
+  // shown (or used on create) for a title too short to have produced it.
+  const shownEstimate = title.trim().length >= 3 ? aiEstimate : null;
+
   const list = useMemo(() => {
     const a = quests.filter((q) => !q.completed && (q.quest_type === 'daily' || q.quest_type === 'side'));
     const d = quests.filter((q) => q.completed);
-    return [...prioritizeQuests(a, pillars, todayCheckin), ...d];
-  }, [quests, pillars, todayCheckin]);
+    return [...prioritizeQuests(a, pillars, todayCheckin, dailyIntention), ...d];
+  }, [quests, pillars, todayCheckin, dailyIntention]);
+
+  const focusRelevance = useMemo(
+    () => getQuestFocusRelevance(quests, dailyIntention),
+    [quests, dailyIntention],
+  );
 
   const handleAdd = () => {
     if (!title.trim()) return;
-    const est = aiEstimate || estimateXP(title.trim(), null, pillar, type);
+    const est = shownEstimate || estimateXP(title.trim(), null, pillar, type);
     addQuest({ title: title.trim(), description: null, pillar, difficulty: est.difficulty,
       xp_reward: est.xp, quest_type: type,
       is_recurring: type === 'daily', recurrence_rule: type === 'daily' ? 'daily' : null, due_date: null });
@@ -100,7 +120,20 @@ export default function PriorityQueue() {
   return (
     <HUDPanel delay={1}>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Today&apos;s Tasks</h2>
+        <div className="flex items-center gap-2 min-w-0">
+          <Link href="/quests" className="text-sm font-semibold text-text-secondary uppercase tracking-wider hover:text-text-primary transition-colors flex-shrink-0">
+            Today&apos;s Tasks
+          </Link>
+          {dailyIntention && (
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/10 border border-accent/20 min-w-0">
+              <Target size={9} className="text-accent flex-shrink-0" />
+              <span className="text-[10px] text-accent uppercase tracking-wider font-semibold flex-shrink-0">Focus</span>
+              <span className="text-[10px] text-text-secondary truncate" title={dailyIntention}>
+                {dailyIntention}
+              </span>
+            </div>
+          )}
+        </div>
         <HUDButton size="sm" variant="secondary" onClick={() => setShowAdd(!showAdd)}>
           {showAdd ? <X size={14} /> : <><Plus size={14} /> Add Task</>}
         </HUDButton>
@@ -116,14 +149,14 @@ export default function PriorityQueue() {
                 className="w-full bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-placeholder"
                 onKeyDown={(e) => e.key === 'Enter' && handleAdd()} />
 
-              {aiEstimate && (
+              {shownEstimate && (
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
                   className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent-dim/50 border border-accent/10">
                   <Brain size={12} className="text-accent flex-shrink-0" />
                   <span className="text-[11px] text-accent/80 font-medium">AI:</span>
-                  <DifficultyBadge difficulty={aiEstimate.difficulty} />
-                  <span className="text-xs font-semibold text-accent tabular-nums">+{aiEstimate.xp} XP</span>
-                  <span className="text-[10px] text-text-tertiary ml-auto">{aiEstimate.reasoning}</span>
+                  <DifficultyBadge difficulty={shownEstimate.difficulty} />
+                  <span className="text-xs font-semibold text-accent tabular-nums">+{shownEstimate.xp} XP</span>
+                  <span className="text-[10px] text-text-tertiary ml-auto">{shownEstimate.reasoning}</span>
                 </motion.div>
               )}
 
@@ -145,7 +178,7 @@ export default function PriorityQueue() {
       </AnimatePresence>
 
       <div className="flex flex-col gap-1.5">
-          {list.map((q) => <QuestCard key={q.id} quest={q} />)}
+          {list.map((q) => <QuestCard key={q.id} quest={q} focusRelevance={focusRelevance[q.id]} />)}
         {list.length === 0 && (
           <div className="text-center py-14">
             <Sparkles size={28} className="mx-auto mb-3 text-text-placeholder opacity-20" />

@@ -1,9 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { useStore } from '@/stores/useStore';
 import HUDClock from '@/components/hud/HUDClock';
 import { getLevelFromXP } from '@/lib/xp';
 import { Hexagon, Menu, Command } from 'lucide-react';
+
 
 export default function Navbar() {
   const user = useStore((s) => s.user);
@@ -19,29 +21,32 @@ export default function Navbar() {
           className="md:hidden text-text-tertiary hover:text-text-primary transition-colors cursor-pointer">
           <Menu size={20} />
         </button>
-        <div className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent to-purple flex items-center justify-center shadow-[0_0_16px_rgba(200,200,200,0.25)]">
             <Hexagon size={13} className="text-white" />
           </div>
           <span className="text-sm font-bold text-text-primary hidden sm:block tracking-tight">Life OS</span>
-        </div>
+        </Link>
       </div>
       <HUDClock />
       <div className="flex items-center gap-3">
-        <kbd className="hidden md:flex items-center gap-1 px-2 py-1 rounded-lg bg-bg-elevated border border-border text-[10px] text-text-placeholder font-mono">
-          <Command size={10} />K
+        <kbd
+          title="Open command palette (⌘K or Ctrl+K)"
+          className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-bg-elevated border border-border text-[10px] text-text-placeholder font-mono hover:text-text-secondary transition-colors"
+        >
+          <Command size={10} /> <span className="text-text-tertiary">Commands</span>
         </kbd>
-        {user && (
+        {user ? (
           <div className="flex items-center gap-2.5">
             <div className="text-right hidden sm:block">
               <div className="text-sm font-medium text-text-primary">{user.display_name}</div>
-              <div className="text-[11px] text-text-tertiary">Lv. {level} · {user.character_class}</div>
+              <div className="text-[11px] text-text-tertiary">Lv. {level}</div>
             </div>
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 border border-accent/20 text-accent flex items-center justify-center text-xs font-bold">
               {user.display_name.charAt(0).toUpperCase()}
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </header>
   );

@@ -26,6 +26,9 @@ export default function Hourglass({ progress, running, mode, width = 180, height
   const animFrameRef = useRef<number>(0);
   const smoothProgressRef = useRef(progress);
   const lastTimeRef = useRef(0);
+  // The rAF loop re-enters draw through this ref: a useCallback can't
+  // reference itself before its declaration completes.
+  const drawRef = useRef<((timestamp: number) => void) | null>(null);
 
   const sandColor = mode === 'work' ? '#c0c0c0' : '#fbbf24';
   const sandColorDim = mode === 'work' ? 'rgba(200,200,200,0.5)' : 'rgba(251,191,36,0.5)';
@@ -83,35 +86,6 @@ export default function Hourglass({ progress, running, mode, width = 180, height
     }
     ctx.closePath();
   }, [cx, topW, topY, botY, midY, getWidthAtY]);
-
-  const drawSandBody = useCallback((
-    ctx: CanvasRenderingContext2D,
-    fromY: number,
-    toY: number,
-    grad: CanvasGradient,
-  ) => {
-    if (Math.abs(toY - fromY) < 0.5) return;
-    const steps = 24;
-    ctx.beginPath();
-
-    const startW = getWidthAtY(fromY);
-    ctx.moveTo(cx - startW, fromY);
-    ctx.lineTo(cx + startW, fromY);
-
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const y = fromY + (toY - fromY) * t;
-      ctx.lineTo(cx + getWidthAtY(y), y);
-    }
-    for (let i = steps; i >= 0; i--) {
-      const t = i / steps;
-      const y = fromY + (toY - fromY) * t;
-      ctx.lineTo(cx - getWidthAtY(y), y);
-    }
-    ctx.closePath();
-    ctx.fillStyle = grad;
-    ctx.fill();
-  }, [cx, getWidthAtY]);
 
   const draw = useCallback((timestamp: number) => {
     const canvas = canvasRef.current;
@@ -359,15 +333,12 @@ export default function Hourglass({ progress, running, mode, width = 180, height
 
     const settled = !running && Math.abs(progress - smoothProgressRef.current) < 0.001 && particlesRef.current.length === 0;
     if (!settled) {
-      animFrameRef.current = requestAnimationFrame(draw);
+      animFrameRef.current = requestAnimationFrame((t) => drawRef.current?.(t));
     }
   }, [progress, running, width, height, sandColor, sandColorDim, sandColorBright, cx, topY, botY, midY, neckHalf, topW, topSandMaxH, botSandMaxH, drawGlassShape, getWidthAtY, glassStroke, glassHighlight]);
 
   useEffect(() => {
-    smoothProgressRef.current = progress;
-  }, []);
-
-  useEffect(() => {
+    drawRef.current = draw;
     lastTimeRef.current = 0;
     cancelAnimationFrame(animFrameRef.current);
     animFrameRef.current = requestAnimationFrame(draw);

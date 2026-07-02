@@ -8,12 +8,23 @@ import { ArrowUp, ArrowDown, Minus } from 'lucide-react';
 
 export default function LifeBalanceRadar() {
   const pillars = useStore((s) => s.pillars);
+  // Pillars are seeded at level 1 / 0 XP, so "has data" means real earned XP,
+  // not mere existence — otherwise the empty state would never show.
+  const hasAnyData = pillars.some((p) => p.current_xp > 0);
 
   return (
     <HUDPanel delay={2}>
       <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">Life Balance</h2>
       <div className="flex flex-col items-center">
-        <RadarChart pillars={pillars} size={190} />
+        {!hasAnyData ? (
+          <div className="flex flex-col items-center justify-center py-6 px-4 text-center" style={{ minHeight: 190 }}>
+            <RadarChart pillars={pillars} size={190} empty />
+            <p className="text-xs text-text-tertiary mt-3 max-w-[200px]">Complete tasks to see your life balance across Mind, Body, Work, Wealth, Spirit, and Social.</p>
+          </div>
+        ) : (
+          <RadarChart pillars={pillars} size={190} />
+        )}
+        {pillars.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mt-4 w-full">
           {pillars.map((p) => {
             const cfg = PILLAR_CONFIG[p.pillar];
@@ -35,6 +46,7 @@ export default function LifeBalanceRadar() {
             );
           })}
         </div>
+        )}
       </div>
     </HUDPanel>
   );

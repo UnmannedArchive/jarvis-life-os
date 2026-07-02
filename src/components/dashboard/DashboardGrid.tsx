@@ -8,12 +8,14 @@ import {
   GripVertical, X, Plus, Settings2, Lock,
   Sun, Crosshair, Target, Zap, Gift, CheckSquare, Calendar, CalendarDays,
   Flame, User, Hexagon, Trophy, ArrowRight, BarChart3, Activity, Gauge, PenLine,
+  ListChecks, Sparkles,
 } from 'lucide-react';
 
 const LoginBonus = lazy(() => import('@/components/dashboard/LoginBonus'));
 const WelcomeBriefing = lazy(() => import('@/components/dashboard/WelcomeBriefing'));
 const DailyIntention = lazy(() => import('@/components/dashboard/DailyIntention'));
 const DailyCommitment = lazy(() => import('@/components/dashboard/DailyCommitment'));
+const TodayPlanner = lazy(() => import('@/components/dashboard/TodayPlanner'));
 const ProgressNudge = lazy(() => import('@/components/dashboard/ProgressNudge'));
 const PriorityQueue = lazy(() => import('@/components/dashboard/PriorityQueue'));
 const LifeBalanceRadar = lazy(() => import('@/components/dashboard/LifeBalanceRadar'));
@@ -25,18 +27,24 @@ const TomorrowHook = lazy(() => import('@/components/dashboard/TomorrowHook'));
 const EndOfDayReview = lazy(() => import('@/components/dashboard/EndOfDayReview'));
 const SystemStatus = lazy(() => import('@/components/dashboard/SystemStatus'));
 const GoogleCalendarWidget = lazy(() => import('@/components/dashboard/GoogleCalendarWidget'));
+const WhoopWidget = lazy(() => import('@/components/dashboard/WhoopWidget'));
+const WhoopCoach = lazy(() => import('@/components/dashboard/WhoopCoach'));
 const PerformanceRating = lazy(() => import('@/components/dashboard/PerformanceRating'));
+const SmartInbox = lazy(() => import('@/components/dashboard/SmartInbox'));
 const VentJournal = lazy(() => import('@/components/dashboard/VentJournal'));
 
 const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   Sun, Crosshair, Target, Zap, Gift, CheckSquare, Calendar, CalendarDays,
   Flame, User, Hexagon, Trophy, ArrowRight, BarChart3, Activity, Gauge, PenLine,
+  ListChecks, Sparkles,
 };
 
 const WIDGET_COMPONENTS: Record<string, React.ComponentType> = {
+  smart_inbox: SmartInbox,
   login_bonus: LoginBonus,
   welcome: WelcomeBriefing,
   intention: DailyIntention,
+  planner: TodayPlanner,
   commitment: DailyCommitment,
   nudge: ProgressNudge,
   tasks: PriorityQueue,
@@ -51,6 +59,8 @@ const WIDGET_COMPONENTS: Record<string, React.ComponentType> = {
   review: EndOfDayReview,
   system: SystemStatus,
   gcalendar: GoogleCalendarWidget,
+  whoop: WhoopWidget,
+  whoop_coach: WhoopCoach,
 };
 
 function WidgetFallback() {
@@ -235,10 +245,11 @@ export default function DashboardGrid() {
     return items;
   }, [widgets]);
 
-  const topFull = gridItems.filter((i) => i.col === 'full' && ['login_bonus', 'welcome', 'intention', 'commitment', 'nudge'].includes(i.id));
+  const TOP_FULL_IDS = ['smart_inbox', 'login_bonus', 'welcome', 'intention', 'planner', 'commitment', 'nudge'];
+  const topFull = gridItems.filter((i) => i.col === 'full' && TOP_FULL_IDS.includes(i.id));
   const mainWide = gridItems.filter((i) => i.col === 'wide');
   const mainSmall = gridItems.filter((i) => i.col === 'small');
-  const bottomFull = gridItems.filter((i) => i.col === 'full' && !['login_bonus', 'welcome', 'intention', 'commitment', 'nudge'].includes(i.id));
+  const bottomFull = gridItems.filter((i) => i.col === 'full' && !TOP_FULL_IDS.includes(i.id));
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">

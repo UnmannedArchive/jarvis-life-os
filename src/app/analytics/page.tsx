@@ -6,6 +6,7 @@ import { PILLAR_CONFIG, Pillar } from '@/lib/types';
 import HUDPanel from '@/components/hud/HUDPanel';
 import ProgressRing from '@/components/hud/ProgressRing';
 import StatCard from '@/components/hud/StatCard';
+import WeeklyReview from '@/components/analytics/WeeklyReview';
 import { Target, TrendingUp, Flame, Zap } from 'lucide-react';
 import { format, subDays, eachDayOfInterval } from 'date-fns';
 import {
@@ -16,12 +17,22 @@ import {
 const PILLAR_ORDER: Pillar[] = ['mind', 'body', 'work', 'wealth', 'spirit', 'social'];
 type TimeRange = '7d' | '14d' | '30d';
 
-function CustomTooltip({ active, payload, label }: any) {
+interface TooltipEntry {
+  name: string;
+  value: number;
+  color?: string;
+}
+
+function CustomTooltip({ active, payload, label }: {
+  active?: boolean;
+  payload?: TooltipEntry[];
+  label?: string;
+}) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-[rgba(255,255,255,0.03)] rounded-xl border border-border shadow-lg p-2.5 text-xs">
       <div className="font-medium text-text-primary mb-1">{label}</div>
-      {payload.map((e: any) => (
+      {payload.map((e) => (
         <div key={e.name} className="flex items-center gap-1.5 text-text-secondary">
           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: e.color }} />
           {e.name}: {e.value}
@@ -46,19 +57,28 @@ export default function AnalyticsPage() {
   const days = range === '30d' ? 30 : range === '14d' ? 14 : 7;
 
   const xpChartData = useMemo(() => {
+    const xpByDate: Record<string, number> = {};
+    xpHistory.forEach((e) => { xpByDate[e.date] = (xpByDate[e.date] || 0) + e.xp; });
     const start = subDays(new Date(), days);
-    return eachDayOfInterval({ start, end: new Date() }).map((date) => {
-      const d = format(date, 'yyyy-MM-dd');
-      return { date: format(date, 'MMM d'), xp: xpHistory.filter((e) => e.date === d).reduce((s, e) => s + e.xp, 0) };
-    });
+    return eachDayOfInterval({ start, end: new Date() }).map((date) => ({
+      date: format(date, 'MMM d'),
+      xp: xpByDate[format(date, 'yyyy-MM-dd')] || 0,
+    }));
   }, [xpHistory, days]);
 
   const pillarChartData = useMemo(() => {
+    // One pass over history instead of days × pillars filter scans.
+    const byDatePillar: Record<string, Record<string, number>> = {};
+    xpHistory.forEach((e) => {
+      if (!e.pillar) return;
+      const day = (byDatePillar[e.date] ??= {});
+      day[e.pillar] = (day[e.pillar] || 0) + e.xp;
+    });
     const start = subDays(new Date(), days);
     return eachDayOfInterval({ start, end: new Date() }).map((date) => {
       const d = format(date, 'yyyy-MM-dd');
-      const r: Record<string, any> = { date: format(date, 'MMM d') };
-      PILLAR_ORDER.forEach((p) => { r[p] = xpHistory.filter((e) => e.date === d && e.pillar === p).reduce((s, e) => s + e.xp, 0); });
+      const r: Record<string, number | string> = { date: format(date, 'MMM d') };
+      PILLAR_ORDER.forEach((p) => { r[p] = byDatePillar[d]?.[p] || 0; });
       return r;
     });
   }, [xpHistory, days]);
@@ -73,6 +93,10 @@ export default function AnalyticsPage() {
         <StatCard icon={<Flame size={14} />} label="Current Streak" value={`${user?.current_streak || 0}d`} sublabel={`Best: ${user?.longest_streak || 0}d`} color="#fbbf24" delay={1} />
         <StatCard icon={<TrendingUp size={14} />} label="Total XP" value={user?.total_xp?.toLocaleString() || '0'} color="#888888" delay={2} />
         <StatCard icon={<Zap size={14} />} label="Completion Rate" value={`${completionRate}%`} sublabel="of daily tasks" color="#34d399" delay={3} />
+      </div>
+
+      <div className="mb-4">
+        <WeeklyReview />
       </div>
 
       <div className="flex gap-1 mb-4">

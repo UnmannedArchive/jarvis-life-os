@@ -1,14 +1,25 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useStore } from '@/stores/useStore';
+import { useStore, XPHistoryEntry } from '@/stores/useStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Undo2 } from 'lucide-react';
-import { Quest } from '@/lib/types';
+import { Quest, User, LifePillar, ActivityLogEntry, ActivityFeedEntry } from '@/lib/types';
 
+// completeQuest fans out into pillar XP/streaks, total XP, character class,
+// xpHistory, the activity log, and the activity feed — so undo restores a
+// snapshot of all of those, not just total_xp (which silently left ghost
+// pillar XP behind). The window is 5s and a new completion replaces the
+// snapshot, so wholesale slice restore is safe in practice.
 interface UndoState {
   quest: Quest;
-  previousXP: number;
+  snapshot: {
+    user: User | null;
+    pillars: LifePillar[];
+    xpHistory: XPHistoryEntry[];
+    activityLog: ActivityLogEntry[];
+    activityFeed: ActivityFeedEntry[];
+  };
   timeout: ReturnType<typeof setTimeout>;
 }
 
@@ -27,30 +38,38 @@ export function captureUndoState(questId: string) {
     setGlobalUndo?.(null);
   }, 5000);
 
-  undoStack = { quest: { ...quest }, previousXP: state.user?.total_xp || 0, timeout };
+  undoStack = {
+    quest: { ...quest },
+    snapshot: {
+      user: state.user,
+      pillars: state.pillars,
+      xpHistory: state.xpHistory,
+      activityLog: state.activityLog,
+      activityFeed: state.activityFeed,
+    },
+    timeout,
+  };
   setGlobalUndo?.(undoStack);
 }
 
 export default function UndoToast() {
   const [current, setCurrent] = useState<UndoState | null>(null);
-  const setQuests = useStore((s) => s.setQuests);
-  const setUser = useStore((s) => s.setUser);
-  const user = useStore((s) => s.user);
-  const quests = useStore((s) => s.quests);
 
   useEffect(() => { setGlobalUndo = setCurrent; return () => { setGlobalUndo = null; }; }, []);
 
   const handleUndo = useCallback(() => {
-    if (!current || !user) return;
-    const restored = quests.map((q) =>
-      q.id === current.quest.id ? { ...current.quest, completed: false, completed_at: null } : q
-    );
-    setQuests(restored);
-    setUser({ ...user, total_xp: current.previousXP });
-    if (current.timeout) clearTimeout(current.timeout);
+    if (!current) return;
+    useStore.setState({
+      ...current.snapshot,
+      // Other quests may have changed in the window; only this one reverts.
+      quests: useStore.getState().quests.map((q) =>
+        q.id === current.quest.id ? { ...current.quest, completed: false, completed_at: null } : q
+      ),
+    });
+    clearTimeout(current.timeout);
     undoStack = null;
     setCurrent(null);
-  }, [current, user, quests, setQuests, setUser]);
+  }, [current]);
 
   return (
     <AnimatePresence>

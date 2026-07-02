@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useStore } from '@/stores/useStore';
-import { Quest, Pillar, Difficulty, QuestType, PILLAR_CONFIG } from '@/lib/types';
+import { Pillar, Difficulty, QuestType, PILLAR_CONFIG } from '@/lib/types';
 import { estimateXP } from '@/lib/xpAI';
 import HUDPanel from '@/components/hud/HUDPanel';
 import HUDButton from '@/components/hud/HUDButton';
@@ -64,11 +64,13 @@ export default function QuestsPage() {
       debounceRef.current = setTimeout(() => {
         setAiEstimate(estimateXP(newTitle.trim(), newDesc.trim() || null, newPillar, activeTab));
       }, 250);
-    } else {
-      setAiEstimate(null);
     }
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [newTitle, newDesc, newPillar, activeTab]);
+
+  // Derived rather than cleared in the effect: a stale estimate is never
+  // shown (or used on create) for a title too short to have produced it.
+  const shownEstimate = newTitle.trim().length >= 3 ? aiEstimate : null;
 
   const filtered = useMemo(() => {
     return quests.filter((q) => {
@@ -84,7 +86,7 @@ export default function QuestsPage() {
 
   const handleCreate = () => {
     if (!newTitle.trim()) return;
-    const est = aiEstimate || estimateXP(newTitle.trim(), newDesc.trim() || null, newPillar, activeTab);
+    const est = shownEstimate || estimateXP(newTitle.trim(), newDesc.trim() || null, newPillar, activeTab);
     addQuest({
       title: newTitle.trim(),
       description: newDesc.trim() || null,
@@ -145,10 +147,15 @@ export default function QuestsPage() {
 
         <div className="flex flex-col gap-1.5">
             {incomplete.map((quest) => (
-              <div key={quest.id}
+              <div
+                key={quest.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => completeQuest(quest.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); completeQuest(quest.id); } }}
+                data-clickable
                 className="flex items-center gap-3 p-3 rounded-xl border border-border bg-[rgba(255,255,255,0.03)] hover:border-border-hover transition-all group">
-                <button onClick={() => completeQuest(quest.id)}
-                  className="w-5 h-5 rounded border-2 border-border-hover hover:border-accent flex items-center justify-center cursor-pointer flex-shrink-0" />
+                <div className="w-5 h-5 rounded border-2 border-border-hover group-hover:border-accent flex items-center justify-center flex-shrink-0" />
                 <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: PILLAR_CONFIG[quest.pillar].color }} />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-text-primary">{quest.title}</div>
@@ -157,8 +164,8 @@ export default function QuestsPage() {
                 {quest.due_date && <DueDateLabel date={quest.due_date} />}
                 <DifficultyBadge difficulty={quest.difficulty} />
                 <span className="text-xs text-text-tertiary">+{quest.xp_reward}</span>
-                <button onClick={() => deleteQuest(quest.id)}
-                  className="opacity-0 group-hover:opacity-100 text-text-placeholder hover:text-danger transition-all cursor-pointer">
+                <button onClick={(e) => { e.stopPropagation(); deleteQuest(quest.id); }}
+                  className="opacity-0 group-hover:opacity-100 text-text-placeholder hover:text-danger transition-all p-1">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -222,7 +229,7 @@ export default function QuestsPage() {
                     className="w-full bg-[rgba(255,255,255,0.04)] border border-border rounded-xl px-3 py-2 text-sm placeholder:text-text-placeholder resize-none" />
                 </div>
 
-                {aiEstimate && (
+                {shownEstimate && (
                   <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
                     className="rounded-xl border border-accent/15 bg-accent-dim/40 p-3">
                     <div className="flex items-center gap-2 mb-1.5">
@@ -230,9 +237,9 @@ export default function QuestsPage() {
                       <span className="text-[11px] font-semibold text-accent uppercase tracking-wider">AI XP Estimate</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <DifficultyBadge difficulty={aiEstimate.difficulty} />
-                      <span className="text-lg font-bold text-text-primary tabular-nums">+{aiEstimate.xp} XP</span>
-                      <span className="text-[11px] text-text-tertiary ml-auto">{aiEstimate.reasoning}</span>
+                      <DifficultyBadge difficulty={shownEstimate.difficulty} />
+                      <span className="text-lg font-bold text-text-primary tabular-nums">+{shownEstimate.xp} XP</span>
+                      <span className="text-[11px] text-text-tertiary ml-auto">{shownEstimate.reasoning}</span>
                     </div>
                   </motion.div>
                 )}

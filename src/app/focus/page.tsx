@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useStore } from '@/stores/useStore';
 import { Pillar, PILLAR_CONFIG } from '@/lib/types';
+import { parseIntention } from '@/lib/focusAI';
 import HUDPanel from '@/components/hud/HUDPanel';
 import Hourglass from '@/components/focus/Hourglass';
-import { Play, Pause, RotateCcw, Coffee, Zap, Plus, Minus, ChevronUp, ChevronDown } from 'lucide-react';
+import { Play, Pause, RotateCcw, Coffee, Zap, Plus, Minus, ChevronUp, ChevronDown, Crosshair } from 'lucide-react';
 
 const PRESETS = [
   { label: '15 min', minutes: 15, type: 'work' },
@@ -19,14 +20,27 @@ export default function FocusPage() {
   const addLogEntry = useStore((s) => s.addLogEntry);
   const user = useStore((s) => s.user);
   const setUser = useStore((s) => s.setUser);
+  const dailyIntention = useStore((s) => s.dailyIntention);
+
+  const intentionCtx = useMemo(() => parseIntention(dailyIntention), [dailyIntention]);
 
   const [duration, setDuration] = useState(25 * 60);
   const [remaining, setRemaining] = useState(25 * 60);
   const [running, setRunning] = useState(false);
   const [mode, setMode] = useState<'work' | 'break'>('work');
-  const [pillar, setPillar] = useState<Pillar>('work');
+  const [pillar, setPillar] = useState<Pillar>(intentionCtx?.primaryPillar ?? 'work');
   const [sessions, setSessions] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Auto-update pillar selection when the daily focus changes (e.g. user
+  // sets/changes intention from the dashboard). Adjusted during render (the
+  // documented "derived state with override" pattern) instead of in an
+  // effect, so it doesn't cost an extra committed render.
+  const [prevPrimary, setPrevPrimary] = useState(intentionCtx?.primaryPillar);
+  if (intentionCtx?.primaryPillar !== prevPrimary) {
+    setPrevPrimary(intentionCtx?.primaryPillar);
+    if (intentionCtx?.primaryPillar) setPillar(intentionCtx.primaryPillar);
+  }
 
   const pct = duration > 0 ? (duration - remaining) / duration : 0;
   const mins = Math.floor(remaining / 60);
@@ -79,6 +93,28 @@ export default function FocusPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-2xl mx-auto">
+      {dailyIntention && (
+        <div className="mb-4 p-3 rounded-xl bg-accent/[0.06] border border-accent/20 flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-accent/15 flex items-center justify-center flex-shrink-0">
+            <Crosshair size={13} className="text-accent" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] font-semibold text-accent uppercase tracking-widest mb-0.5">Today&apos;s Focus</div>
+            <div className="text-sm text-text-primary truncate">&ldquo;{dailyIntention}&rdquo;</div>
+          </div>
+          {intentionCtx?.primaryPillar && (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] flex-shrink-0">
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ backgroundColor: PILLAR_CONFIG[intentionCtx.primaryPillar].color }}
+              />
+              <span className="text-[10px] text-text-secondary uppercase tracking-wider">
+                XP → {PILLAR_CONFIG[intentionCtx.primaryPillar].label}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
       <HUDPanel delay={0} glow>
         <div className="flex flex-col items-center py-6">
           {/* Mode indicator */}
@@ -155,7 +191,10 @@ export default function FocusPage() {
 
           {/* Play / Reset controls */}
           <div className="flex items-center gap-4 mb-6">
-            <button onClick={reset}
+            <button
+              onClick={reset}
+              aria-label="Reset timer to current duration"
+              title="Reset timer"
               className="w-11 h-11 rounded-full flex items-center justify-center text-text-placeholder
                 hover:text-text-secondary hover:bg-[rgba(255,255,255,0.04)] transition-all cursor-pointer active:scale-90"
             >
@@ -175,10 +214,11 @@ export default function FocusPage() {
             <div className="w-11" />
           </div>
 
-          {/* Presets */}
-          <div className="flex gap-2 flex-wrap justify-center mb-5">
+          {/* Presets — Work and Break grouped and labeled */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 flex-wrap justify-center mb-5">
             <div className="flex gap-1.5 items-center">
               <Zap size={12} className="text-accent mr-0.5" />
+              <span className="text-[10px] uppercase tracking-wider text-text-placeholder mr-1">Work</span>
               {PRESETS.filter(p => p.type === 'work').map((p) => (
                 <button key={p.label} onClick={() => selectPreset(p.minutes, p.type)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer border ${
@@ -190,9 +230,10 @@ export default function FocusPage() {
                 </button>
               ))}
             </div>
-            <div className="w-px h-6 bg-border mx-1" />
+            <div className="w-px h-6 bg-border mx-1 hidden sm:block" />
             <div className="flex gap-1.5 items-center">
               <Coffee size={12} className="text-warning mr-0.5" />
+              <span className="text-[10px] uppercase tracking-wider text-text-placeholder mr-1">Break</span>
               {PRESETS.filter(p => p.type === 'break').map((p) => (
                 <button key={p.label} onClick={() => selectPreset(p.minutes, p.type)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer border ${

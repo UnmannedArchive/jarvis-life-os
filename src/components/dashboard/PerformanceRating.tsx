@@ -3,25 +3,28 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '@/stores/useStore';
 import { computePerformance, Rating, Insight } from '@/lib/performanceAI';
+import { useWhoopData } from '@/hooks/useWhoopData';
+import { recoveryInsight } from '@/lib/whoop/insights';
 import { PILLAR_CONFIG, Pillar } from '@/lib/types';
 import HUDPanel from '@/components/hud/HUDPanel';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp,
-  AlertTriangle, CheckCircle2, Lightbulb, Gauge,
+  AlertTriangle, CheckCircle2, Lightbulb, Gauge, Target,
 } from 'lucide-react';
 
-const RATING_STYLES: Record<Rating, { color: string; glow: string; bg: string }> = {
+const RATING_STYLES: Record<Rating | '—', { color: string; glow: string; bg: string }> = {
   S: { color: '#fbbf24', glow: 'rgba(251,191,36,0.3)', bg: 'rgba(251,191,36,0.08)' },
   A: { color: '#34d399', glow: 'rgba(52,211,153,0.3)', bg: 'rgba(52,211,153,0.08)' },
   B: { color: '#c0c0c0', glow: 'rgba(200,200,200,0.3)', bg: 'rgba(200,200,200,0.08)' },
   C: { color: '#fb923c', glow: 'rgba(251,146,60,0.3)', bg: 'rgba(251,146,60,0.08)' },
   D: { color: '#f87171', glow: 'rgba(248,113,113,0.3)', bg: 'rgba(248,113,113,0.08)' },
   F: { color: '#888888', glow: 'rgba(152,152,168,0.2)', bg: 'rgba(152,152,168,0.06)' },
+  '—': { color: '#71717a', glow: 'rgba(113,113,122,0.2)', bg: 'rgba(113,113,122,0.06)' },
 };
 
-function RatingBadge({ rating, score }: { rating: Rating; score: number }) {
-  const style = RATING_STYLES[rating];
+function RatingBadge({ rating, score }: { rating: Rating | '—'; score: number }) {
+  const style = RATING_STYLES[rating as keyof typeof RATING_STYLES] ?? RATING_STYLES['—'];
   return (
     <div className="flex flex-col items-center">
       <motion.div
@@ -95,7 +98,7 @@ function InsightItem({ insight }: { insight: Insight }) {
   );
 }
 
-function PillarBar({ pillar, label, score, trend, color }: {
+function PillarBar({ label, score, trend, color }: {
   pillar: Pillar; label: string; score: number; trend: 'up' | 'down' | 'flat'; color: string;
 }) {
   return (
@@ -123,7 +126,12 @@ export default function PerformanceRating() {
   const activityLog = useStore((s) => s.activityLog);
   const user = useStore((s) => s.user);
   const consecutiveLogins = useStore((s) => s.consecutiveLogins);
+  const todayCheckin = useStore((s) => s.todayCheckin);
+  const dailyIntention = useStore((s) => s.dailyIntention);
   const [expanded, setExpanded] = useState(false);
+
+  const completedTasks = useMemo(() => quests.filter((q) => q.completed).length, [quests]);
+  const hasData = completedTasks > 0;
 
   const report = useMemo(() => {
     return computePerformance(
@@ -133,13 +141,31 @@ export default function PerformanceRating() {
       activityLog,
       user?.current_streak || 0,
       consecutiveLogins,
+      todayCheckin,
+      dailyIntention,
     );
-  }, [quests, pillars, xpHistory, activityLog, user, consecutiveLogins]);
+  }, [quests, pillars, xpHistory, activityLog, user, consecutiveLogins, todayCheckin, dailyIntention]);
 
-  const style = RATING_STYLES[report.rating];
-  const strengths = report.insights.filter((i) => i.type === 'strength');
-  const weaknesses = report.insights.filter((i) => i.type === 'weakness');
-  const tips = report.insights.filter((i) => i.type === 'tip');
+  // Feed WHOOP recovery into the coach: a green day reads as a strength to push,
+  // a chronic/low day as a tip to protect recovery (never a penalty).
+  const whoop = useWhoopData();
+  const recInsight = useMemo(() => {
+    const today = whoop.today.recovery?.recoveryScore ?? null;
+    const recent = whoop.week?.recovery.map((r) => r.recoveryScore) ?? [];
+    return recoveryInsight(today, recent);
+  }, [whoop.today.recovery, whoop.week]);
+
+  const allInsights = useMemo(
+    () => (recInsight ? [recInsight, ...report.insights] : report.insights),
+    [recInsight, report.insights],
+  );
+
+  const displayRating = hasData ? report.rating : ('—' as const);
+  const displayScore = hasData ? report.score : 50;
+  const style = RATING_STYLES[displayRating];
+  const strengths = allInsights.filter((i) => i.type === 'strength');
+  const weaknesses = allInsights.filter((i) => i.type === 'weakness');
+  const tips = allInsights.filter((i) => i.type === 'tip');
 
   return (
     <HUDPanel delay={1}>
@@ -148,18 +174,22 @@ export default function PerformanceRating() {
           <Gauge size={13} className="text-accent drop-shadow-[0_0_6px_rgba(200,200,200,0.3)]" />
           <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Performance</h2>
         </div>
-        <span className="text-[10px] text-text-placeholder uppercase tracking-wider font-medium">
-          {report.weeklyTrend === 'improving' ? 'Trending Up' : report.weeklyTrend === 'declining' ? 'Trending Down' : 'Steady'}
-        </span>
+        {hasData && (
+          <span className="text-[10px] text-text-placeholder uppercase tracking-wider font-medium">
+            {report.weeklyTrend === 'improving' ? 'Trending Up' : report.weeklyTrend === 'declining' ? 'Trending Down' : 'Steady'}
+          </span>
+        )}
       </div>
 
       <div className="flex items-start gap-4 mb-4">
-        <RatingBadge rating={report.rating} score={report.score} />
+        <RatingBadge rating={displayRating} score={displayScore} />
         <div className="flex-1 pt-1">
           <div className="text-sm font-semibold text-text-primary mb-0.5" style={{ color: style.color }}>
-            {report.label}
+            {hasData ? report.label : 'Unranked'}
           </div>
-          <p className="text-xs text-text-tertiary leading-relaxed mb-2">{report.summary}</p>
+          <p className="text-xs text-text-tertiary leading-relaxed mb-2">
+            {hasData ? report.summary : 'Complete tasks to unlock your rating'}
+          </p>
 
           {/* Today mini stats */}
           <div className="flex gap-3">
@@ -184,6 +214,29 @@ export default function PerformanceRating() {
           </div>
         </div>
       </div>
+
+      {/* Focus alignment — only when an intention was set today */}
+      {report.focus && (
+        <div className="mb-3 p-2.5 rounded-lg bg-accent/[0.04] border border-accent/15">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Target size={11} className="text-accent" />
+            <span className="text-[10px] font-semibold text-accent uppercase tracking-widest">Focus alignment</span>
+            <span className="ml-auto text-xs font-bold text-accent tabular-nums">{report.focus.alignment}%</span>
+          </div>
+          <div className="text-[11px] text-text-tertiary truncate mb-1.5">
+            &ldquo;{report.focus.intention}&rdquo; — {report.focus.completedRelevant}/{report.focus.relevantTotal} aligned tasks done
+          </div>
+          <div className="h-1.5 rounded-full bg-[rgba(255,255,255,0.04)] overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${report.focus.alignment}%` }}
+              transition={{ duration: 1, ease: 'easeOut' }}
+              className="h-full rounded-full bg-accent"
+              style={{ filter: 'drop-shadow(0 0 4px rgba(200,200,200,0.3))' }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Pillar breakdown bars */}
       <div className="flex flex-col gap-1.5 mb-3">

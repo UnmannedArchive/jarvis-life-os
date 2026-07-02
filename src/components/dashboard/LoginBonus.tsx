@@ -21,7 +21,13 @@ export default function LoginBonus() {
     <AnimatePresence>
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -10, height: 0 }} className="mb-4">
-        <div className="relative overflow-hidden rounded-2xl border border-purple/15 p-5 shimmer"
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={claimBonus}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); claimBonus(); } }}
+          data-clickable
+          className="relative overflow-hidden rounded-2xl border border-purple/15 p-5 shimmer hover:border-purple/25 transition-colors"
           style={{ background: 'linear-gradient(135deg, rgba(150,150,150,0.06) 0%, rgba(200,200,200,0.04) 50%, rgba(150,150,150,0.06) 100%)' }}>
           <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-bl from-purple/[0.06] to-transparent rounded-full -translate-y-1/2 translate-x-1/4" />
           <div className="flex items-center justify-between relative z-10">

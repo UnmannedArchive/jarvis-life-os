@@ -1,4 +1,5 @@
 import { Quest, Pillar, ActivityLogEntry } from './types';
+import { parseISO } from 'date-fns';
 
 const STOP_WORDS = new Set([
   'i', 'me', 'my', 'we', 'our', 'you', 'your', 'it', 'its', 'the', 'a', 'an',
@@ -245,5 +246,215 @@ export function computeFocusScore(
       topPillar,
     },
     insight,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Reusable building blocks for focus-driven features (coach, priority, perf)
+// ---------------------------------------------------------------------------
+
+/**
+ * Classify arbitrary text into the most likely pillar.
+ * Returns the pillar with the most keyword hits, or null if no match.
+ * Also returns a 0-1 confidence based on hit density.
+ */
+export function classifyTextPillar(text: string): { pillar: Pillar | null; confidence: number; allHits: Record<Pillar, number> } {
+  const tokens = expandWithSynonyms(tokenize(text));
+  const hits: Record<Pillar, number> = { mind: 0, body: 0, work: 0, wealth: 0, spirit: 0, social: 0 };
+  for (const [pillar, keywords] of Object.entries(PILLAR_KEYWORDS) as [Pillar, string[]][]) {
+    for (const kw of keywords) if (tokens.has(kw)) hits[pillar]++;
+  }
+  let bestPillar: Pillar | null = null;
+  let bestCount = 0;
+  for (const [p, c] of Object.entries(hits) as [Pillar, number][]) {
+    if (c > bestCount) {
+      bestPillar = p;
+      bestCount = c;
+    }
+  }
+  // Confidence: a single match = 0.4, two matches = 0.7, three+ = 0.9+
+  const confidence = bestCount === 0 ? 0 : Math.min(0.4 + (bestCount - 1) * 0.25, 0.95);
+  return { pillar: bestPillar, confidence, allHits: hits };
+}
+
+export interface IntentionContext {
+  raw: string;
+  tokens: Set<string>;
+  pillars: Set<Pillar>;
+  primaryPillar: Pillar | null;
+}
+
+/** Parse a daily intention string into reusable matching context. */
+export function parseIntention(intention: string | null | undefined): IntentionContext | null {
+  if (!intention) return null;
+  const trimmed = intention.trim();
+  if (!trimmed) return null;
+
+  const baseTokens = tokenize(trimmed);
+  if (baseTokens.length === 0) return null;
+
+  const expanded = expandWithSynonyms(baseTokens);
+  const pillars = detectPillars(expanded);
+
+  // Pick "primary" pillar by counting which pillar's keyword set has the most hits.
+  let primaryPillar: Pillar | null = null;
+  let bestHits = 0;
+  for (const [pillar, keywords] of Object.entries(PILLAR_KEYWORDS) as [Pillar, string[]][]) {
+    let hits = 0;
+    for (const kw of keywords) if (expanded.has(kw)) hits++;
+    if (hits > bestHits) {
+      bestHits = hits;
+      primaryPillar = pillar;
+    }
+  }
+
+  return {
+    raw: trimmed,
+    tokens: expanded,
+    pillars,
+    primaryPillar,
+  };
+}
+
+/**
+ * Score how relevant a quest is to the intention on a 0-1 scale.
+ * Mirrors the relevance heuristic used inside computeFocusScore so the
+ * coach, priority queue, and performance rating all agree.
+ */
+export function scoreQuestRelevance(quest: Quest, ctx: IntentionContext): number {
+  const titleTokens = expandWithSynonyms(tokenize(quest.title));
+
+  let relevance = 0;
+  relevance += wordOverlap(ctx.tokens, titleTokens) * 0.35;
+
+  const haystack = `${quest.title} ${quest.description ?? ''}`;
+  relevance += substringMatch(ctx.tokens, haystack) * 0.15;
+
+  if (ctx.pillars.has(quest.pillar)) relevance += 0.3;
+
+  if (quest.description) {
+    const descTokens = expandWithSynonyms(tokenize(quest.description));
+    relevance += wordOverlap(ctx.tokens, descTokens) * 0.2;
+  }
+
+  return Math.min(relevance, 1);
+}
+
+export interface FocusPlan {
+  intention: string;
+  pillars: Pillar[];
+  primaryPillar: Pillar | null;
+  /** Top incomplete quests, sorted by relevance to intention (highest first). */
+  nextActions: { quest: Quest; relevance: number }[];
+  /** All quests scored, including completed (highest first). */
+  allScored: { quest: Quest; relevance: number }[];
+  relevantTotal: number;
+  completedRelevant: number;
+  /** Tasks completed today that are NOT aligned with the focus. */
+  driftQuests: Quest[];
+  /** Activity log entries today whose description matches focus tokens. */
+  focusedActivityToday: number;
+  totalActivityToday: number;
+  /** 0-1 alignment score (same as percentage / 100). */
+  alignmentScore: number;
+  alignmentLabel: 'laser' | 'on-track' | 'partial' | 'drifting' | 'off';
+}
+
+const RELEVANCE_THRESHOLD = 0.15;
+
+/**
+ * Build a rich focus plan that the coach + priority + performance modules
+ * all consume. Returns null when there's no intention or nothing to plan.
+ */
+export function getFocusPlan(
+  intention: string | null | undefined,
+  quests: Quest[],
+  activityLog: ActivityLogEntry[],
+): FocusPlan | null {
+  const ctx = parseIntention(intention);
+  if (!ctx) return null;
+
+  const scored = quests.map((quest) => ({
+    quest,
+    relevance: scoreQuestRelevance(quest, ctx),
+  }));
+  scored.sort((a, b) => b.relevance - a.relevance);
+
+  const relevant = scored.filter((s) => s.relevance >= RELEVANCE_THRESHOLD);
+  const completedRelevant = relevant.filter((s) => s.quest.completed).length;
+
+  const nextActions = scored
+    .filter((s) => !s.quest.completed && s.relevance >= RELEVANCE_THRESHOLD)
+    .slice(0, 3);
+
+  // Drift = tasks the user actually completed today, but they don't relate to the intention.
+  const todayKey = new Date().toDateString();
+  const driftQuests = scored
+    .filter((s) => {
+      if (!s.quest.completed || !s.quest.completed_at) return false;
+      if (s.relevance >= RELEVANCE_THRESHOLD) return false;
+      try {
+        return parseISO(s.quest.completed_at).toDateString() === todayKey;
+      } catch {
+        return false;
+      }
+    })
+    .map((s) => s.quest);
+
+  const todayLogs = activityLog.filter((l) => {
+    try {
+      return new Date(l.created_at).toDateString() === todayKey;
+    } catch {
+      return false;
+    }
+  });
+  const focusedActivityToday = todayLogs.filter((l) => {
+    const text = l.description.toLowerCase();
+    for (const w of ctx.tokens) if (text.includes(w)) return true;
+    return false;
+  }).length;
+
+  // Compute alignment using completed-relevant ratio, weighted, with activity boost.
+  let alignmentScore: number;
+  if (relevant.length === 0) {
+    const totalCompleted = quests.filter((q) => q.completed).length;
+    const generalCompletion = quests.length > 0 ? totalCompleted / quests.length : 0;
+    const pillarMatches = quests.filter((q) => q.completed && ctx.pillars.has(q.pillar)).length;
+    const pillarWeight = quests.length > 0 ? pillarMatches / quests.length : 0;
+    alignmentScore = generalCompletion * 0.15 + pillarWeight * 0.25;
+  } else {
+    const totalRelW = relevant.reduce((s, x) => s + x.relevance, 0);
+    const compRelW = relevant
+      .filter((s) => s.quest.completed)
+      .reduce((s, x) => s + x.relevance, 0);
+    const weighted = totalRelW > 0 ? compRelW / totalRelW : 0;
+    const ratio = relevant.length > 0 ? completedRelevant / relevant.length : 0;
+    const totalCompleted = quests.filter((q) => q.completed).length;
+    const general = quests.length > 0 ? totalCompleted / quests.length : 0;
+    alignmentScore = weighted * 0.5 + ratio * 0.3 + general * 0.2;
+  }
+  alignmentScore = Math.min(alignmentScore + Math.min(focusedActivityToday * 0.04, 0.15), 1);
+
+  let alignmentLabel: FocusPlan['alignmentLabel'];
+  const pct = alignmentScore * 100;
+  if (pct >= 85) alignmentLabel = 'laser';
+  else if (pct >= 65) alignmentLabel = 'on-track';
+  else if (pct >= 40) alignmentLabel = 'partial';
+  else if (pct >= 15) alignmentLabel = 'drifting';
+  else alignmentLabel = 'off';
+
+  return {
+    intention: ctx.raw,
+    pillars: Array.from(ctx.pillars),
+    primaryPillar: ctx.primaryPillar,
+    nextActions,
+    allScored: scored,
+    relevantTotal: relevant.length,
+    completedRelevant,
+    driftQuests,
+    focusedActivityToday,
+    totalActivityToday: todayLogs.length,
+    alignmentScore,
+    alignmentLabel,
   };
 }

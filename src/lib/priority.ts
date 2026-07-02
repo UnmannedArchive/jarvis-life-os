@@ -1,5 +1,6 @@
 import { differenceInDays, isToday, parseISO } from 'date-fns';
-import { Quest, LifePillar, DailyCheckin, Pillar } from './types';
+import { Quest, LifePillar, DailyCheckin } from './types';
+import { parseIntention, scoreQuestRelevance, IntentionContext } from './focusAI';
 
 const WEIGHTS = {
   urgency: 3,
@@ -7,6 +8,9 @@ const WEIGHTS = {
   balance: 2,
   energy: 1.5,
   momentum: 1,
+  // Focus is the strongest single signal when an intention is explicitly set —
+  // the user told us what matters today, so aligned tasks float to the top.
+  focus: 5,
 };
 
 function getUrgencyScore(quest: Quest): number {
@@ -68,24 +72,50 @@ function getDifficultyFlowScore(quest: Quest, index: number): number {
   return 2;
 }
 
+function getFocusScore(quest: Quest, ctx: IntentionContext | null): number {
+  if (!ctx) return 0;
+  // scoreQuestRelevance returns 0-1 — scale to 0-10 to play nicely with the
+  // other 0-10 sub-scores, then the WEIGHTS.focus multiplier amplifies it.
+  return scoreQuestRelevance(quest, ctx) * 10;
+}
+
 export function prioritizeQuests(
   quests: Quest[],
   pillars: LifePillar[],
   checkin: DailyCheckin | null,
+  dailyIntention: string | null = null,
 ): Quest[] {
+  const focusCtx = parseIntention(dailyIntention);
+
   const scored = quests.map((quest, index) => {
     const score =
       WEIGHTS.urgency * getUrgencyScore(quest) +
       WEIGHTS.streak * getStreakRiskScore(quest, pillars) +
       WEIGHTS.balance * getPillarDeficitScore(quest, pillars) +
       WEIGHTS.energy * getEnergyMatchScore(quest, checkin) +
-      WEIGHTS.momentum * getDifficultyFlowScore(quest, index);
+      WEIGHTS.momentum * getDifficultyFlowScore(quest, index) +
+      WEIGHTS.focus * getFocusScore(quest, focusCtx);
 
     return { quest, score };
   });
 
   scored.sort((a, b) => b.score - a.score);
   return scored.map((s) => s.quest);
+}
+
+/**
+ * Returns relevance scores keyed by quest id so UI can render focus indicators.
+ * Returns empty map when no intention is set.
+ */
+export function getQuestFocusRelevance(
+  quests: Quest[],
+  dailyIntention: string | null,
+): Record<string, number> {
+  const ctx = parseIntention(dailyIntention);
+  if (!ctx) return {};
+  const out: Record<string, number> = {};
+  for (const q of quests) out[q.id] = scoreQuestRelevance(q, ctx);
+  return out;
 }
 
 export function getMissionGrade(
@@ -115,14 +145,16 @@ export function getGreeting(name: string): { greeting: string; timeOfDay: string
   else timeOfDay = 'night';
 
   const greetingMap: Record<string, string> = {
-    morning: 'GOOD MORNING',
-    afternoon: 'GOOD AFTERNOON',
-    evening: 'GOOD EVENING',
-    night: 'GOOD EVENING',
+    morning: 'Good morning',
+    afternoon: 'Good afternoon',
+    evening: 'Good evening',
+    night: 'Good evening',
   };
 
+  const suffix = name ? `, ${name}.` : '.';
+
   return {
-    greeting: `${greetingMap[timeOfDay]}, ${name.toUpperCase()}.`,
+    greeting: `${greetingMap[timeOfDay]}${suffix}`,
     timeOfDay,
   };
 }
@@ -131,7 +163,14 @@ export function getContextualInsight(
   pillars: LifePillar[],
   streak: number,
   questsCompletedYesterday: number,
+  dailyIntention: string | null = null,
 ): string {
+  // When the user has set a focus, surface it prominently — it's the answer
+  // to "what should I do?" and beats generic streak/pillar copy.
+  if (dailyIntention && dailyIntention.trim()) {
+    return `Today's focus: "${dailyIntention.trim()}". Build the day around it.`;
+  }
+
   const insights: string[] = [];
 
   if (streak > 0) {
@@ -152,7 +191,7 @@ export function getContextualInsight(
   }
 
   if (insights.length === 0) {
-    insights.push('All systems operational. Ready to begin.');
+    insights.push('Complete a few tasks to see personalized insights here.');
   }
 
   return insights[0];
