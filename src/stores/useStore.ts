@@ -1,7 +1,8 @@
 'use client';
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { lifeOsStateStorage } from '@/lib/persistStorage';
 import {
   User,
   LifePillar,
@@ -81,6 +82,12 @@ interface AppState {
   streakFreezes: number;
   lastLoginDate: string | null;
   showCriticalHit: { xp: number; task: string } | null;
+
+  // Local backup bookkeeping
+  lastExportAt: string | null;
+  lastBackupNudgeAt: string | null;
+  setLastExportAt: (iso: string) => void;
+  setLastBackupNudgeAt: (iso: string) => void;
 
   // Appearance
   backgroundImage: string | null;
@@ -268,6 +275,10 @@ export const useStore = create<AppState>()(persist((set, get) => ({
   streakFreezes: 0,
   lastLoginDate: null,
   showCriticalHit: null,
+  lastExportAt: null,
+  lastBackupNudgeAt: null,
+  setLastExportAt: (iso) => set({ lastExportAt: iso }),
+  setLastBackupNudgeAt: (iso) => set({ lastBackupNudgeAt: iso }),
   backgroundImage: null,
   dashboardWidgets: [],
   gcalApiKey: null,
@@ -880,7 +891,10 @@ export const useStore = create<AppState>()(persist((set, get) => ({
     workflowEnabled: state.workflowEnabled,
     workflowCategoryOverrides: state.workflowCategoryOverrides,
     workflowSummary: state.workflowSummary,
+    lastExportAt: state.lastExportAt,
+    lastBackupNudgeAt: state.lastBackupNudgeAt,
   }),
+  storage: createJSONStorage(() => lifeOsStateStorage),
   version: 1,
   migrate: (persistedState) => migrateStore((persistedState ?? {}) as Record<string, unknown>) as typeof persistedState,
 }));

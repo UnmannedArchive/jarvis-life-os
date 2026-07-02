@@ -16,6 +16,8 @@ import ActivityDrawer from '@/components/activity/ActivityDrawer';
 import LoginModal from '@/components/auth/LoginModal';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { loadUserData, createNewUser } from '@/lib/supabaseSync';
+import { shouldNudgeBackup } from '@/lib/backupNudge';
+import { toast } from 'sonner';
 import { PILLAR_CONFIG } from '@/lib/types';
 import type { User, Pillar, LifePillar } from '@/lib/types';
 
@@ -103,9 +105,45 @@ export default function AppShell({ children }: { children: ReactNode }) {
     let mounted = true;
 
     if (!isSupabaseConfigured()) {
-      initLocalSave();
-      setReady(true);
-      return;
+      // Storage is async (IndexedDB) — the persisted save may still be loading
+      // when this effect runs. Seeding before hydration would mis-detect a
+      // fresh install, so wait for hydration to finish.
+      let nudgeTimer: ReturnType<typeof setTimeout> | undefined;
+      const init = () => {
+        if (!mounted) return;
+        initLocalSave();
+        setReady(true);
+
+        // Delay past first paint: this effect can run before the sibling
+        // <Toaster> subscribes, and sonner drops toasts fired before mount.
+        nudgeTimer = setTimeout(() => {
+          if (!mounted) return;
+          const s = useStore.getState();
+          const hasContent = s.quests.length > 0 || s.activityLog.length > 0;
+          if (shouldNudgeBackup(new Date(), s.lastExportAt, s.lastBackupNudgeAt, hasContent)) {
+            s.setLastBackupNudgeAt(new Date().toISOString());
+            toast('Back up your save?', {
+              description: 'Your progress lives only in this browser. Export a copy from Settings.',
+              action: { label: 'Export', onClick: () => router.push('/settings') },
+              duration: 10000,
+            });
+          }
+        }, 1500);
+      };
+
+      if (useStore.persist.hasHydrated()) {
+        init();
+        return () => {
+          mounted = false;
+          if (nudgeTimer) clearTimeout(nudgeTimer);
+        };
+      }
+      const unsubHydration = useStore.persist.onFinishHydration(init);
+      return () => {
+        mounted = false;
+        unsubHydration();
+        if (nudgeTimer) clearTimeout(nudgeTimer);
+      };
     }
 
     const fallbackTimer = setTimeout(() => {

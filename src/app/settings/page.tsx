@@ -10,6 +10,7 @@ import DifficultyBadge from '@/components/hud/DifficultyBadge';
 import { getLevelFromXP } from '@/lib/xp';
 import { Download, RotateCcw, Check, Image as ImageIcon, X, Upload, Link as LinkIcon, Calendar, ExternalLink, FileText, Trash2, AlertCircle, Activity } from 'lucide-react';
 import { parseICalFile, getCalendarName } from '@/lib/icalParser';
+import { buildExportPayload, parseImportPayload } from '@/lib/exportData';
 import { useWhoopData } from '@/hooks/useWhoopData';
 import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import RecurringTasksManager from '@/components/dashboard/RecurringTasksManager';
@@ -82,11 +83,10 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const icalFileRef = useRef<HTMLInputElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
-  const loadFromCloud = useStore((s) => s.loadFromCloud);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const [pendingImport, setPendingImport] = useState<
-    | { data: Parameters<typeof loadFromCloud>[0]; summary: string }
+    | { data: Record<string, unknown>; summary: string }
     | null
   >(null);
 
@@ -112,21 +112,17 @@ export default function SettingsPage() {
 
   const handleExport = () => {
     const s = useStore.getState();
-    const data = {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      user: s.user,
-      pillars: s.pillars,
-      quests: s.quests,
-      goals: s.goals,
-      todayCheckin: s.todayCheckin,
-      activityLog: s.activityLog,
-    };
+    // Export everything persist() covers (journal, ideas, streaks, WHOOP cache,
+    // …), not just the original 6 slices — a partial backup isn't a backup.
+    const partialize = useStore.persist.getOptions().partialize;
+    const snapshot = (partialize ? partialize(s) : s) as unknown as Record<string, unknown>;
+    const data = buildExportPayload(snapshot);
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `lifeos-export-${new Date().toISOString().split('T')[0]}.json`;
     a.click(); URL.revokeObjectURL(url);
+    s.setLastExportAt(new Date().toISOString());
   };
 
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,22 +134,12 @@ export default function SettingsPage() {
     reader.onload = (ev) => {
       try {
         const parsed = JSON.parse(ev.target?.result as string);
-        if (!parsed || typeof parsed !== 'object' || !parsed.user || !Array.isArray(parsed.quests)) {
-          setImportError("This doesn't look like a Life OS export (missing user or tasks).");
+        const result = parseImportPayload(parsed);
+        if (!result.ok) {
+          setImportError(result.error);
           return;
         }
-        const data = {
-          user: parsed.user,
-          pillars: Array.isArray(parsed.pillars) ? parsed.pillars : [],
-          quests: Array.isArray(parsed.quests) ? parsed.quests : [],
-          goals: Array.isArray(parsed.goals) ? parsed.goals : [],
-          todayCheckin: parsed.todayCheckin ?? null,
-          activityLog: Array.isArray(parsed.activityLog) ? parsed.activityLog : [],
-        };
-        setPendingImport({
-          data,
-          summary: `${data.quests.length} task${data.quests.length === 1 ? '' : 's'} and ${data.goals.length} goal${data.goals.length === 1 ? '' : 's'}`,
-        });
+        setPendingImport({ data: result.state, summary: result.summary });
       } catch {
         setImportError("Couldn't read this file. Make sure it's a Life OS export (.json).");
       }
@@ -165,8 +151,11 @@ export default function SettingsPage() {
 
   const confirmImport = () => {
     if (!pendingImport) return;
-    loadFromCloud(pendingImport.data);
-    setName(pendingImport.data.user?.display_name || '');
+    // Merge every slice the export file carries (v2 = full snapshot, v1 = the
+    // original 6) without wiping fields the file doesn't know about.
+    useStore.setState(pendingImport.data as Partial<ReturnType<typeof useStore.getState>>);
+    const importedUser = pendingImport.data.user as { display_name?: string } | undefined;
+    setName(importedUser?.display_name || '');
     setImportSuccess(`Restored ${pendingImport.summary}.`);
     setPendingImport(null);
     setTimeout(() => setImportSuccess(null), 4000);
