@@ -6,6 +6,7 @@ import { PILLAR_CONFIG, Pillar } from '@/lib/types';
 import HUDPanel from '@/components/hud/HUDPanel';
 import ProgressRing from '@/components/hud/ProgressRing';
 import StatCard from '@/components/hud/StatCard';
+import WeeklyReview from '@/components/analytics/WeeklyReview';
 import { Target, TrendingUp, Flame, Zap } from 'lucide-react';
 import { format, subDays, eachDayOfInterval } from 'date-fns';
 import {
@@ -92,6 +93,10 @@ export default function AnalyticsPage() {
         <StatCard icon={<Flame size={14} />} label="Current Streak" value={`${user?.current_streak || 0}d`} sublabel={`Best: ${user?.longest_streak || 0}d`} color="#fbbf24" delay={1} />
         <StatCard icon={<TrendingUp size={14} />} label="Total XP" value={user?.total_xp?.toLocaleString() || '0'} color="#888888" delay={2} />
         <StatCard icon={<Zap size={14} />} label="Completion Rate" value={`${completionRate}%`} sublabel="of daily tasks" color="#34d399" delay={3} />
+      </div>
+
+      <div className="mb-4">
+        <WeeklyReview />
       </div>
 
       <div className="flex gap-1 mb-4">
